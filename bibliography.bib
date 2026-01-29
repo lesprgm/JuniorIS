@@ -1,34 +1,62 @@
-% Here is an example of how to create a bibliography entry for an article using
-% BibTeX. Generally you won't have to write these out yourself, because they are
-% provided by most web sites that allow you to export citations. The string
-% "clrsAlgorithms" is a citation key, and if you were citing the source in a
-% document you would use \cite{clrsAlgorithms}.
-@book{clrsAlgorithms,
-author = {Cormen, Thomas H. and Leiserson, Charles E. and Rivest, Ronald L. and Stein, Clifford},
-title = {Introduction to Algorithms, Third Edition},
-year = {2009},
-isbn = {0262033844},
-publisher = {The MIT Press},
-edition = {3rd},
-annote  = {This is a popular algorithms textbook which is well-cited. In particular, Part VI on graph algorithms will be of interest. Chapter 26 discusses flow networks and introduces commonly used notation. It formally describes the problem of obtaining a maximum flow and its equivalence to obtaining a minimum cut. The classical method of Ford and Fulkerson's algorithm for finding a maximum flow is described, and it includes several examples. Additional methods for obtaining a maximum flow, including the push-relabel method, are also described. The chapter notes include additional references to specific articles which may be helpful, such as those of historical interest (the article in which an algorithm was originally proposed) as well as state-of-the-art improvements (more recent articles to improve the approach).}
+@inproceedings{Chen_2023_WACV,
+author = {Chen, Boris and Ziai, Amir and Tucker, Rebecca S. and Xie, Yuchen},
+title = {Match Cutting: Finding Cuts With Smooth Visual Transitions},
+booktitle = {Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
+month = {January},
+year = {2023},
+pages = {2115--2125},
+url = {https://openaccess.thecvf.com/content/WACV2023/html/Chen_Match_Cutting_Finding_Cuts_With_Smooth_Visual_Transitions_WACV_2023_paper.html},
+annote  = {This paper tackles the practical problem of finding high-quality match cuts, where two shots are connected by similar framing, composition, or action. The authors introduce a modular pipeline that filters and ranks candidate shot pairs at scale using visual, audio, and audio-visual features, and they evaluate classification and metric-learning approaches on a labeled dataset of about 20,000 shot pairs. The main contribution is a scalable system for match-cut discovery along with a released dataset, embeddings, and code, which makes the problem measurable and reproducible.
+This is a strong scholarly source because it is a peer-reviewed WACV 2023 paper with a clear experimental setup and public resources, which allows the community to verify results and build on the benchmarks. It is also highly relevant to my project because it operationalizes “smooth visual transition” with concrete feature choices and evaluation procedures.
+For my MatchCut Compiler idea, this paper provides concrete signals and metrics for automatically scoring candidate match cuts by motion, shape, framing, and semantic similarity; I can extend their approach to produce “receipts” (explanations) and rank alternatives.}
 }
 
-@inproceedings{10.1145/3704637.3734789,
-author = {Hug, Sarah and McKay, Mark},
-title = {Problematizing {AI} Literacy Access - Understanding Student {AI} Literacy from Student Voices},
-year = {2025},
-isbn = {9798400706264},
-publisher = {Association for Computing Machinery},
-address = {New York, NY, USA},
-url = {https://doi.org/10.1145/3704637.3734789},
-doi = {10.1145/3704637.3734789},
-abstract = {Domestic undergraduate computer science students formally learn about machine learning and artificial intelligence in upper level undergraduate computing programs, yet they must navigate the lure of ChatGPT and other generative Artificial Intelligence tools that have been found to be somewhat accurate at completing early coding assignments. As AI tools proliferate, messaging about their use in academic settings are varied, and access to AI literacy is unknown. Through an investigation of interviews with Pell grant eligible college students at open access colleges, we address the following research questions: How do low-income undergraduate interview participants describe their uses of and attitudes regarding generative AI tool use for academic purposes? and What elements of AI digital literacy appear to be accessible to interview participants, based on their descriptive statements?},
-booktitle = {Proceedings of the 2025 Conference on Research on Equitable and Sustained Participation in Engineering, Computing, and Technology},
-pages = {339–342},
-numpages = {4},
-keywords = {AI tool use, Pell-Grant eligible students, digital divide, generative AI literacy, qualitative interview},
-location = {Newark, NJ, USA},
-series = {RESPECT 2025}
+@inproceedings{Pardo_2022_ECCV,
+author = {Pardo, Alejandro and Caba Heilbron, Fabian and Le\'on Alc\'azar, Juan and Thabet, Ali and Ghanem, Bernard},
+title = {MovieCuts: A New Dataset and Benchmark for Cut Type Recognition},
+booktitle = {Computer Vision -- ECCV 2022},
+series = {Lecture Notes in Computer Science},
+volume = {13667},
+pages = {668--685},
+year = {2022},
+publisher = {Springer},
+doi = {10.1007/978-3-031-20071-7_39},
+url = {https://link.springer.com/chapter/10.1007/978-3-031-20071-7_39}
+}
+
+@inproceedings{Chen_2021_CVPR,
+author = {Chen, Shixing and Nie, Xiaohan and Fan, David and Zhang, Dongqing and Bhat, Vimal and Hamid, Raffay},
+title = {Shot Contrastive Self-Supervised Learning for Scene Boundary Detection},
+booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+month = {June},
+year = {2021},
+pages = {9796--9805},
+url = {https://openaccess.thecvf.com/content/CVPR2021/html/Chen_Shot_Contrastive_Self-Supervised_Learning_for_Scene_Boundary_Detection_CVPR_2021_paper.html}
+}
+
+@inproceedings{Yang_2024_CVPR,
+author = {Yang, Yue and Sun, Fan-Yun and Weihs, Luca and VanderBilt, Eli and Herrasti, Alvaro and Han, Winson and Wu, Jiajun and Haber, Nick and Krishna, Ranjay and Liu, Lingjie and Callison-Burch, Chris and Yatskar, Mark and Kembhavi, Aniruddha and Clark, Christopher},
+title = {Holodeck: Language Guided Generation of 3D Embodied AI Environments},
+booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+month = {June},
+year = {2024},
+pages = {16227--16237},
+url = {https://openaccess.thecvf.com/content/CVPR2024/html/Yang_Holodeck_Language_Guided_Generation_of_3D_Embodied_AI_Environments_CVPR_2024_paper.html},
+annote  = {Holodeck proposes a system that converts a natural-language prompt into a 3D interactive environment for embodied AI. The method uses a large language model to draft object lists and spatial relations, then optimizes object placement to satisfy those constraints while populating scenes with assets from Objaverse. The paper contributes a full prompt-to-scene pipeline, human evaluations showing preference over procedural baselines in residential scenes, and demonstrations of training agents in novel, automatically generated environments.
+This is a credible and relevant source because it is a peer-reviewed CVPR 2024 paper with detailed methodology, large-scale evaluation, and clear empirical comparisons, making it a strong foundation for research on language-guided environment generation.
+For my Holodeck-like idea, the paper directly validates prompt-to-world/spec generation and suggests how to make the compilation deterministic by explicitly emitting constraints and solving them, then evaluating in simulated environments.}
+}
+
+@inproceedings{Deitke_2022_NeurIPS,
+author = {Deitke, Matt and VanderBilt, Eli and Herrasti, Alvaro and Weihs, Luca and Ehsani, Kiana and Salvador, Jordi and Han, Winson and Kolve, Eric and Kembhavi, Aniruddha and Mottaghi, Roozbeh},
+title = {ProcTHOR: Large-Scale Embodied AI Using Procedural Generation},
+booktitle = {Advances in Neural Information Processing Systems},
+volume = {35},
+year = {2022},
+url = {https://proceedings.neurips.cc/paper_files/paper/2022/hash/27c546ab1e4f1d7d638e6a8dfbad9a07-Abstract-Conference.html},
+annote  = {ProcTHOR introduces a procedural generation framework for creating large numbers of diverse, fully interactive indoor environments for embodied AI. The system samples floorplans, populates them with a sizable library of interactive objects, and supports randomized layouts, materials, and lighting to scale scene diversity. The paper contributes both the ProcTHOR generation pipeline and a complementary artist-designed test set (ArchitecTHOR), and it shows that training on large procedurally generated collections improves performance and generalization across multiple embodied AI benchmarks.
+This is a strong scholarly source because it is a NeurIPS 2022 peer-reviewed contribution with extensive empirical evidence and a clear methodological contribution to scalable environment creation, which is central to embodied AI research.
+For my Holodeck-like idea, ProcTHOR offers a concrete example of deterministic compilation from structured specs into simulated environments and a template for evaluating those environments in embodied tasks.}
 }
 
   
