@@ -7,9 +7,9 @@ year = {2023},
 pages = {2115--2125},
 url = {https://openaccess.thecvf.com/content/WACV2023/html/Chen_Match_Cutting_Finding_Cuts_With_Smooth_Visual_Transitions_WACV_2023_paper.html},
 urldate = {2026-01-29},
-annote  = {This paper tackles the practical problem of finding high-quality match cuts, where two shots are connected by similar framing, composition, or action. The authors introduce a modular pipeline that filters and ranks candidate shot pairs at scale using visual, audio, and audio-visual features, and they evaluate classification and metric-learning approaches on a labeled dataset of about 20,000 shot pairs. The main contribution is a scalable system for match-cut discovery along with a released dataset, embeddings, and code, which makes the problem measurable and reproducible.
-This is a strong scholarly source because it is a peer-reviewed WACV 2023 paper with a clear experimental setup and public resources, which allows the community to verify results and build on the benchmarks. It is also highly relevant to my project because it operationalizes “smooth visual transition” with concrete feature choices and evaluation procedures.
-For my MatchCut Compiler idea, this paper provides concrete signals and metrics for automatically scoring candidate match cuts by motion, shape, framing, and semantic similarity; I can extend their approach to produce “receipts” (explanations) and rank alternatives.}
+annote  = {This paper targets automatic discovery of high-quality match cuts, where two shots align in framing, composition, or action to create a smooth transition. The authors present a modular pipeline that generates candidate shot pairs and ranks them using visual, audio, and audio-visual descriptors, and they compare classification and metric-learning models on a labeled dataset of roughly 20,000 pairs. A key contribution is a scalable, reproducible benchmark with released data, learned embeddings, and evaluation metrics for match-cut retrieval.
+As a peer-reviewed WACV 2023 publication, the work is credible and methodologically transparent, with controlled experiments and publicly released artifacts that support verification and reuse. It is relevant because it operationalizes “smooth visual transition” into measurable features and evaluation protocols that can be adopted directly in new systems.
+This connects to the MatchCut Compiler concept, which aims to automatically score candidate match cuts using motion, shape, framing, and semantic similarity, and to provide concise explanations ("receipts") and ranked alternatives for editors.}
 }
 
 @inproceedings{Pardo_2022_ECCV,
@@ -46,9 +46,9 @@ year = {2024},
 pages = {16227--16237},
 url = {https://openaccess.thecvf.com/content/CVPR2024/html/Yang_Holodeck_Language_Guided_Generation_of_3D_Embodied_AI_Environments_CVPR_2024_paper.html},
 urldate = {2026-01-29},
-annote  = {Holodeck proposes a system that converts a natural-language prompt into a 3D interactive environment for embodied AI. The method uses a large language model to draft object lists and spatial relations, then optimizes object placement to satisfy those constraints while populating scenes with assets from Objaverse. The paper contributes a full prompt-to-scene pipeline, human evaluations showing preference over procedural baselines in residential scenes, and demonstrations of training agents in novel, automatically generated environments.
-This is a credible and relevant source because it is a peer-reviewed CVPR 2024 paper with detailed methodology, large-scale evaluation, and clear empirical comparisons, making it a strong foundation for research on language-guided environment generation.
-For my Holodeck-like idea, the paper directly validates prompt-to-world/spec generation and suggests how to make the compilation deterministic by explicitly emitting constraints and solving them, then evaluating in simulated environments.}
+annote  = {Holodeck presents a system that converts a natural-language prompt into an interactive 3D environment for embodied AI. The approach uses a large language model to draft object inventories and spatial relations, then optimizes object placement to satisfy those constraints while populating scenes with assets from Objaverse. The paper contributes a full prompt-to-scene pipeline, human preference studies that outperform procedural baselines on residential scenes, and demonstrations that agents can be trained in the generated environments.
+This is a credible source because it is a peer-reviewed CVPR 2024 paper with a clear methodology, extensive evaluations, and transparent comparisons to baselines, which strengthens confidence in the reported gains. It is relevant to research on language-guided environment generation and controllable simulation.
+This connects to the Holodeck-like prompt-to-world/spec generation concept by showing how constraints can be explicitly represented, solved deterministically, and evaluated in simulated environments to assess downstream agent performance.}
 }
 
 @inproceedings{Deitke_2022_NeurIPS,
@@ -59,9 +59,9 @@ volume = {35},
 year = {2022},
 url = {https://proceedings.neurips.cc/paper_files/paper/2022/hash/27c546ab1e4f1d7d638e6a8dfbad9a07-Abstract-Conference.html},
 urldate = {2026-01-29},
-annote  = {ProcTHOR introduces a procedural generation framework for creating large numbers of diverse, fully interactive indoor environments for embodied AI. The system samples floorplans, populates them with a sizable library of interactive objects, and supports randomized layouts, materials, and lighting to scale scene diversity. The paper contributes both the ProcTHOR generation pipeline and a complementary artist-designed test set (ArchitecTHOR), and it shows that training on large procedurally generated collections improves performance and generalization across multiple embodied AI benchmarks.
-This is a strong scholarly source because it is a NeurIPS 2022 peer-reviewed contribution with extensive empirical evidence and a clear methodological contribution to scalable environment creation, which is central to embodied AI research.
-For my Holodeck-like idea, ProcTHOR offers a concrete example of deterministic compilation from structured specs into simulated environments and a template for evaluating those environments in embodied tasks.}
+annote  = {ProcTHOR introduces a procedural generation framework for creating large numbers of diverse, fully interactive indoor environments for embodied AI. The system samples floorplans, populates them with a large library of interactive objects, and randomizes layouts, materials, and lighting to scale scene diversity. The paper contributes both the ProcTHOR generation pipeline and a complementary artist-designed evaluation set (ArchitecTHOR), and it reports that training on large procedurally generated collections improves performance and generalization across multiple embodied AI benchmarks.
+This is a strong scholarly source because it is a peer-reviewed NeurIPS 2022 contribution with extensive empirical evidence and a clear methodological advance in scalable environment creation, which is central to embodied AI research. It also clarifies trade-offs between procedural controllability and realism that matter when selecting generation settings.
+This connects to the Holodeck-like concept by providing a concrete example of deterministic compilation from structured scene specifications into simulated environments and by outlining evaluation protocols for those environments in embodied tasks.}
 }
 
   
