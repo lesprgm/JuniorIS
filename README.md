@@ -1,5 +1,5 @@
-# Your Project Title Here
-A brief description.
+# VR-First Prompt-to-Walkable World System (Holodeck)
+This project explores a VR-first workflow for turning a natural language prompt into a walkable, explorable 3D environment. The user starts in a stable Creation Room, submits a prompt (voice or text), and enters the generated destination world through a portal once the world meets a minimum playability threshold. The system emphasizes deterministic compilation from a controlled asset/template library and progressive streaming (greybox first, then style and props) to keep VR comfortable and reliable.
 
 
 ## Feature Calendar
