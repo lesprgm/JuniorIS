@@ -1,0 +1,144 @@
+% Holodeck proposal document based on the provided proposal template structure.
+%
+% To compile on the command line:
+% latexmk -pdf holodeck_proposal.tex
+
+\documentclass[12pt]{article}
+\usepackage{setspace}
+\usepackage{graphicx} % used for includegraphics (replace placeholder figure later)
+\singlespace
+\usepackage[left=1in,right=1in,top=1in,bottom=1in]{geometry}
+
+\title{\textbf{Project Topic Proposal: VR First Prompt to Walkable World System (Holodeck)}}
+\author{Leslie}
+
+\begin{document}
+
+\maketitle
+
+\section*{Project Topic and Overview}
+This project builds a VR-first system that converts a user's natural language prompt into a walkable, explorable 3D environment. The user enters VR immediately into a stable ``Creation Room'' (the room of origin), where they can speak what they want to create. If voice is unavailable or fails, the system provides a text fallback so generation is always possible. After the prompt is submitted, the requested environment is compiled off to the side as a separate destination world. Once a minimum playability threshold is met, the system spawns a portal that the user can step through to enter the generated world.
+
+The core design goal is to prioritize comfort, stability, and reliability. Instead of generating arbitrary 3D geometry from scratch, the system compiles worlds from a controlled library of pre-ingested assets and templates, and applies ``StyleKits'' to rapidly match the intended theme. The generated world first appears as a playable greybox, then upgrades visually in phases as assets stream in. This approach is meant to reduce perceived latency and prevent disorienting ``world formation around the body'' effects.
+
+\section*{Significance and Related Work}
+Prompt-driven environment generation is an increasingly important direction because it reduces the manual effort required to build interactive 3D spaces. Prior work demonstrates that language models can produce structured scene descriptions and constraints that can be compiled into interactive environments, rather than treating generation as a purely visual task. For example, Holodeck uses language to specify objects and relationships and then compiles those constraints into an interactive 3D environment by selecting assets and optimizing object placement.~\cite{Yang_2024_CVPR} This project builds on that direction and emphasizes a VR-first user experience with a compiler-style pipeline that guarantees walkability and safety.
+
+A second relevant direction is scalable scene generation for embodied AI and interactive simulation. Procedural systems can produce large collections of varied environments by sampling layouts, placing interactive objects, and randomizing materials and lighting, while enforcing physical validity and interaction consistency. ProcTHOR demonstrates large-scale procedural generation of interactive indoor environments for embodied AI and reports generalization benefits when training on procedurally generated scenes.~\cite{Deitke_2022_NeurIPS} This project adopts a similar emphasis on validity and repeatability, treating a ``prompt to world'' request as a compilation problem with constraints, budgets, and a deterministic intermediate representation.
+
+The motivation for this project is to combine these insights into a practical, testable system: a user can request many different environment concepts, and the system consistently produces a playable world that matches the prompt as closely as possible within the limits of its asset library. The project emphasizes measurable outcomes, including time to first walkable world, compilation success rates, and runtime performance constraints appropriate for VR.
+
+\section*{Goals of the Work}
+The main goals are:
+\begin{enumerate}
+	\item VR-first generation loop: a user can enter VR, submit a prompt by voice or text, observe compilation progress, and walk through the generated world via a portal transition.
+	\item Reliable world compilation: prompts are converted into a structured intermediate representation called \texttt{WorldSpec}. The system validates \texttt{WorldSpec} against a schema and runtime constraints before generating the destination world. The compiler is deterministic so results can be reproduced from the same spec and seed.
+	\item Fast time to walkable: the destination world becomes playable quickly by loading a walkable greybox layout first, then progressively streaming improvements in phases.
+	\item Graceful missing asset handling: if a prompt requests objects not present in the library, the system substitutes similar assets or uses placeholders while preserving theme and functionality.
+\end{enumerate}
+
+\section*{Software to Be Created}
+This project will create a WebXR VR application plus backend services that together implement a planner-to-compiler pipeline.
+
+\textbf{Client (VR application)}
+\begin{itemize}
+	\item A Creation Room that always loads first and contains a minimal assistant UI.
+	\item Voice input with transcript display and editing, plus a text fallback input path.
+	\item Generation status and error messaging in VR.
+	\item A portal system that transitions the user from the Creation Room into the compiled destination world, and supports returning home.
+\end{itemize}
+
+\textbf{Backend (planning, compilation, and validation)}
+\begin{itemize}
+	\item A Pack Registry that stores asset packs, templates, tags, and performance metadata.
+	\item A StyleKit system that defines theme presets (lighting, material palette, ambience, decals, post effects).
+	\item A planner endpoint that maps prompt text to a schema-locked \texttt{WorldSpec} using only valid pack, template, and StyleKit IDs from the registries.
+	\item A validator that checks schema correctness, walkability constraints, asset availability, and performance budgets.
+	\item A compiler that converts \texttt{WorldSpec} into a destination world bundle and a progressive streaming manifest.
+\end{itemize}
+
+\section*{Development Plan}
+The work will proceed in phases aligned with the implementation roadmap in the appendix:
+\begin{itemize}
+	\item Build the VR shell and Creation Room with locomotion and UI.
+	\item Implement voice and text prompt input and the end-to-end request flow.
+	\item Implement Pack Registry and StyleKit formats, loaders, and lookup endpoints.
+	\item Define \texttt{WorldSpec} schema and validation.
+	\item Implement greybox compilation, safe spawn placement, and portal transitions.
+	\item Add progressive streaming phases for style, props, and ambience.
+	\item Add missing asset substitution, budget enforcement, and automated tests.
+\end{itemize}
+
+\section*{Evaluation Plan}
+This project will be evaluated using metrics that reflect reliability and usability:
+\begin{itemize}
+	\item Time to first playable world: time from prompt submission to a walkable destination with safe spawn and teleport surface.
+	\item Compilation success rate: percentage of prompts that produce a valid \texttt{WorldSpec} and pass validation without manual intervention.
+	\item Constraint satisfaction: collision validity, walkability checks, budget checks, and missing asset substitution frequency.
+	\item Runtime performance: stability under target settings, including draw calls, texture tier limits, and frame time consistency.
+\end{itemize}
+
+\section*{Architecture Diagrams}
+Figure~\ref{fig:simple_architecture} presents a simplified end-to-end view of the prompt-to-walkable-world pipeline. Figure~\ref{fig:complex_architecture} expands this into a more detailed architecture view that separates planning, validation, compilation, and progressive streaming responsibilities.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.95\linewidth]{imgs/Simplified_Architecture.png}
+\caption{Simplified architecture for the VR-first prompt-to-walkable-world system.}
+\label{fig:simple_architecture}       % Give a unique label
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.95\linewidth]{imgs/Complex_Architecture.png}
+\caption{Detailed (complex) architecture for planning, validation, compilation, and streaming.}
+\label{fig:complex_architecture}       % Give a unique label
+\end{figure}
+
+\newpage
+\section*{Appendix: Planned Feature List}
+\textit{Roadmap, implementation-level.}
+
+\subsection*{Core Features (in Planned Completion Order)}
+\begin{enumerate}
+	\item Create the Creation Room base scene in Babylon.js with floor, walls, ceiling, and a fixed safe spawn point.
+	\item Add teleport locomotion with a visible teleport arc and restrict targets to valid floor surfaces.
+	\item Implement an in-VR Assistant Panel UI with transcript area and buttons (Start Recording, Stop, Submit Prompt, Clear, Return Home).
+	\item Implement microphone permission handling on user gesture and graceful error states for denied permission.
+	\item Implement speech-to-text transcript capture, display transcript in VR, and allow manual transcript edits.
+	\item Implement text prompt fallback input in VR and route both voice and text into the same prompt submission path.
+	\item Define a versioned \texttt{WorldSpec} JSON Schema including \texttt{template\_id}, \texttt{stylekit\_id}, \texttt{pack\_ids}, \texttt{seed}, \texttt{room\_graph}, \texttt{placements}, \texttt{interactions}, and \texttt{budgets}.
+	\item Implement \texttt{POST /validate\_worldspec} to validate \texttt{WorldSpec} against JSON Schema and return structured validation errors.
+	\item Define Pack Registry manifest format (\texttt{pack\_id}, version, tags, asset list, template compatibility, performance metadata).
+	\item Implement Pack Registry loader that scans pack folders, loads manifests, validates them, and builds an in-memory index.
+	\item Implement Pack Registry endpoints \texttt{GET /packs/search} and \texttt{GET /packs/<id>} with tag-based filtering and ranking.
+	\item Define StyleKit manifest format (lighting preset, material palette, decals, ambience audio, postfx preset, budget overrides).
+	\item Implement StyleKit loader and endpoints \texttt{GET /stylekits} and \texttt{GET /stylekits/<id>}.
+	\item Implement \texttt{POST /plan} that converts prompt text into a schema-locked \texttt{WorldSpec} using only valid registry IDs.
+	\item Implement deterministic seed handling so repeated \texttt{WorldSpec} inputs compile to the same layout and placements.
+	\item Implement Compiler Phase 0: generate destination greybox geometry from template and \texttt{room\_graph}, and attach colliders.
+	\item Implement teleport surface tagging in the destination world and ensure floors are valid landing targets.
+	\item Implement safe spawn placement in the destination world that guarantees no collisions at spawn.
+	\item Implement portal spawning in the Creation Room once the destination world reaches minimum playability.
+	\item Implement Return Home action that restores the Creation Room scene without reloading the page.
+	\item Implement Phase 1 style loading: apply StyleKit lighting and base material palette to the greybox.
+	\item Implement Phase 2 prop streaming: load and place large props first, then secondary props and clutter.
+	\item Implement Phase 3 polish: load ambience audio, decals, and post-processing presets after props load.
+	\item Implement performance budget checks (lights, texture tiers, prop counts) and automatic downgrades when budgets exceed limits.
+	\item Implement missing asset substitution rules: replace missing assets with closest tagged substitutes or fall back to placeholders and log substitutions.
+	\item Add unit tests for schema validation, registry loading, and planner outputs, plus an end-to-end smoke test that verifies walkability.
+\end{enumerate}
+
+\subsection*{Stretch Goals (Only After the Core System Is Complete)}
+\begin{enumerate}
+	\setcounter{enumi}{26}
+	\item Add a missing asset quick options UI that offers 2--3 alternatives (substitutes or theme adjustments) and generates a new portal variant.
+	\item Add world remixing: save \texttt{WorldSpec} plus pack versions and enable safe regeneration with a modified StyleKit or adjusted prop density.
+	\item Add safe live edits via an allowlisted \texttt{StyleKitPatch} schema supporting lighting, fog, ambience, and material palette swaps, with no structural edits.
+\end{enumerate}
+
+\bibliographystyle{acm}
+% References will be added later; this is kept to preserve the template structure.
+\bibliography{bibliography.bib}
+
+\end{document}
