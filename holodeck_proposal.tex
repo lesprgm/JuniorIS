@@ -4,6 +4,7 @@
 % latexmk -pdf holodeck_proposal.tex
 
 \documentclass[12pt]{article}
+\usepackage[T1]{fontenc}
 \usepackage{setspace}
 \usepackage{graphicx} % used for includegraphics (replace placeholder figure later)
 \singlespace
@@ -22,9 +23,11 @@ This project builds a VR-first system that converts a user's natural language pr
 The core design goal is to prioritize comfort, stability, and reliability. Instead of generating arbitrary 3D geometry from scratch, the system compiles worlds from a controlled library of pre-ingested assets and templates, and applies ``StyleKits'' to rapidly match the intended theme. The generated world first appears as a playable greybox, then upgrades visually in phases as assets stream in. This approach is meant to reduce perceived latency and prevent disorienting ``world formation around the body'' effects.
 
 \section*{Significance and Related Work}
-Prompt-driven environment generation is an increasingly important direction because it reduces the manual effort required to build interactive 3D spaces. Prior work demonstrates that language models can produce structured scene descriptions and constraints that can be compiled into interactive environments, rather than treating generation as a purely visual task. For example, Holodeck uses language to specify objects and relationships and then compiles those constraints into an interactive 3D environment by selecting assets and optimizing object placement.~\cite{Yang_2024_CVPR} This project builds on that direction and emphasizes a VR-first user experience with a compiler-style pipeline that guarantees walkability and safety.
+A relevant direction is scalable scene generation for embodied AI and interactive simulation. Procedural systems can produce large collections of varied environments by sampling layouts, placing interactive objects, and randomizing materials and lighting, while enforcing physical validity and interaction consistency. ProcTHOR demonstrates large-scale procedural generation of interactive indoor environments for embodied AI and reports generalization benefits when training on procedurally generated scenes~\cite{Deitke_2022_NeurIPS}. This project adopts a similar emphasis on validity and repeatability, treating a ``prompt to world'' request as a compilation problem with constraints, budgets, and a deterministic intermediate representation.
 
-A second relevant direction is scalable scene generation for embodied AI and interactive simulation. Procedural systems can produce large collections of varied environments by sampling layouts, placing interactive objects, and randomizing materials and lighting, while enforcing physical validity and interaction consistency. ProcTHOR demonstrates large-scale procedural generation of interactive indoor environments for embodied AI and reports generalization benefits when training on procedurally generated scenes.~\cite{Deitke_2022_NeurIPS} This project adopts a similar emphasis on validity and repeatability, treating a ``prompt to world'' request as a compilation problem with constraints, budgets, and a deterministic intermediate representation.
+Prompt-driven environment generation is an increasingly important direction because it reduces the manual effort required to build interactive 3D spaces. Prior work demonstrates that language models can produce structured scene descriptions and constraints that can be compiled into interactive environments, rather than treating generation as a purely visual task. For example, Holodeck uses language to specify objects and relationships and then compiles those constraints into an interactive 3D environment by selecting assets and optimizing object placement~\cite{Yang_2024_CVPR}. This project builds on that direction and emphasizes a VR-first user experience with a compiler-style pipeline that guarantees walkability and safety.
+
+Recent work also shows that a text prompt can be converted into a room scale textured 3D mesh by lifting outputs from 2D text to image models into a consistent 3D representation~\cite{hoellein2023text2room}.
 
 The motivation for this project is to combine these insights into a practical, testable system: a user can request many different environment concepts, and the system consistently produces a playable world that matches the prompt as closely as possible within the limits of its asset library. The project emphasizes measurable outcomes, including time to first walkable world, compilation success rates, and runtime performance constraints appropriate for VR.
 
@@ -137,7 +140,7 @@ Figure~\ref{fig:simple_architecture} presents a simplified end-to-end view of th
 	\item Add safe live edits via an allowlisted \texttt{StyleKitPatch} schema supporting lighting, fog, ambience, and material palette swaps, with no structural edits.
 \end{enumerate}
 
-\bibliographystyle{acm}
+\bibliographystyle{acm-unsrt}
 % References will be added later; this is kept to preserve the template structure.
 \bibliography{bibliography.bib}
 
