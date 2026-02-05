@@ -5,6 +5,10 @@
 
 \documentclass[12pt]{article}
 \usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{cmap}
+\usepackage{lmodern}
+\pdfgentounicode=1
 \usepackage{setspace}
 \usepackage{graphicx} % used for includegraphics (replace placeholder figure later)
 \singlespace
@@ -88,14 +92,14 @@ Figure~\ref{fig:simple_architecture} presents a simplified end-to-end view of th
 \centering
 \includegraphics[width=0.95\linewidth]{imgs/Simplified_Architecture.png}
 \caption{Simplified architecture for the VR-first prompt-to-walkable-world system.}
-\label{fig:simple_architecture}       % Give a unique label
+\label{fig:simple_architecture}      
 \end{figure}
 
 \begin{figure}[h]
 \centering
 \includegraphics[width=0.95\linewidth]{imgs/Complex_Architecture.png}
 \caption{Detailed (complex) architecture for planning, validation, compilation, and streaming.}
-\label{fig:complex_architecture}       % Give a unique label
+\label{fig:complex_architecture}   
 \end{figure}
 
 \newpage
@@ -140,8 +144,7 @@ Figure~\ref{fig:simple_architecture} presents a simplified end-to-end view of th
 	\item Add safe live edits via an allowlisted \texttt{StyleKitPatch} schema supporting lighting, fog, ambience, and material palette swaps, with no structural edits.
 \end{enumerate}
 
-\bibliographystyle{acm-unsrt}
-% References will be added later; this is kept to preserve the template structure.
+\bibliographystyle{acm}
 \bibliography{bibliography.bib}
 
 \end{document}
