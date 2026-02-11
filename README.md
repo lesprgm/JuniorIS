@@ -1,12 +1,12 @@
 # VR-First Prompt-to-Walkable World System (Holodeck)
-This project explores a VR-first workflow for turning a natural language prompt into a walkable, explorable 3D environment. The user starts in a stable Creation Room, submits a prompt (voice or text), and enters the generated destination world through a portal once the world meets a minimum playability threshold. The system emphasizes deterministic compilation from a controlled asset/template library and progressive streaming (greybox first, then style and props) to keep VR comfortable and reliable.
+This project explores a VR-first workflow for turning a natural language prompt into a walkable, explorable 3D environment. The user starts in a stable Creation Room, submits a prompt (voice or text), and enters the generated destination world through a portal once the world meets a minimum playability threshold. The runtime is Unity (Quest-native) with OpenXR and C# scripts; the backend handles planning, validation, and compilation. The system emphasizes deterministic compilation from a controlled asset/template library and progressive streaming (greybox first, then style and props) to keep VR comfortable and reliable.
 
 
 ## Feature Calendar
 
 | **Issue** | **Due date** | **Phase** |
 | --------- | ------------ | --------- |
-| [01 - WebXR session start/end/re-enter + app state machine](https://github.com/lesprgm/JuniorIS/issues/2) | Feb 7, 2026 | MVP |
+| [01 - OpenXR session start/end/re-enter + app state machine](https://github.com/lesprgm/JuniorIS/issues/2) | Feb 7, 2026 | MVP |
 | [02 - Creation Room base scene + safe spawn validation](https://github.com/lesprgm/JuniorIS/issues/3) | Feb 11, 2026 | MVP |
 | [03 - Teleport locomotion (comfort-first) with floor tagging + collision rejection](https://github.com/lesprgm/JuniorIS/issues/4) | Feb 14, 2026 | MVP |
 | [04 - Minimal in-VR UI panel (Voice/Type/Submit/Clear/Return Home + status line)](https://github.com/lesprgm/JuniorIS/issues/5) | Feb 18, 2026 | MVP |
