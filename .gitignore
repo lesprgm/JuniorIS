@@ -275,3 +275,31 @@ TSWLatexianTemp*
 
 # Makeindex log files
 *.lpz
+
+## Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+## Virtual environments
+.venv/
+venv/
+env/
+
+## Unity (Quest/Unity project artifacts)
+Library/
+Temp/
+Obj/
+Build/
+Builds/
+Logs/
+UserSettings/
+MemoryCaptures/
+
+## Unity meta (keep these tracked with assets)
+!**/*.meta
