@@ -1,0 +1,22 @@
+{
+  "worldspec_version": "0.1",
+  "template_id": "room_basic",
+  "seed": 12345,
+  "stylekit_id": "neutral",
+  "pack_ids": ["pack_core"],
+  "placements": [
+    {
+      "asset_id": "chair_01",
+      "transform": {
+        "pos": [0, 0, 0],
+        "rot": [0, 90, 0],
+        "scale": [1, 1, 1]
+      }
+    }
+  ],
+  "budgets": {
+    "max_props": 6,
+    "max_texture_tier": 1,
+    "max_lights": 2
+  }
+}

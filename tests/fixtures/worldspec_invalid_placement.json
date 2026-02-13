@@ -1,0 +1,12 @@
+{
+  "worldspec_version": "0.1",
+  "template_id": "room_basic",
+  "seed": 12345,
+  "placements": [
+    {
+      "transform": {
+        "pos": [0, 0, 0]
+      }
+    }
+  ]
+}
