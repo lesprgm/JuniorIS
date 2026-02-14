@@ -1,0 +1,12 @@
+{
+  "pack_id": "pack_a",
+  "version": "0.1.0",
+  "tags": ["indoor"],
+  "assets": [
+    {
+      "asset_id": "shared_asset_01",
+      "label": "Shared Asset A",
+      "tags": ["chair"]
+    }
+  ]
+}

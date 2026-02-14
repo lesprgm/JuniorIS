@@ -1,0 +1,12 @@
+{
+  "pack_id": "pack_b",
+  "version": "0.1.0",
+  "tags": ["outdoor"],
+  "assets": [
+    {
+      "asset_id": "shared_asset_01",
+      "label": "Shared Asset B",
+      "tags": ["bench"]
+    }
+  ]
+}
