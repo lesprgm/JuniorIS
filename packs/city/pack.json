@@ -1,0 +1,27 @@
+{
+  "pack_id": "city_pack",
+  "version": "0.1.0",
+  "tags": ["outdoor", "city", "prototype"],
+  "assets": [
+    {
+      "asset_id": "city_bench_01",
+      "label": "City Bench",
+      "tags": ["bench", "street", "outdoor"]
+    },
+    {
+      "asset_id": "city_lamp_post_01",
+      "label": "Lamp Post",
+      "tags": ["lamp", "street", "outdoor"]
+    },
+    {
+      "asset_id": "city_sign_01",
+      "label": "Street Sign",
+      "tags": ["sign", "street", "outdoor"]
+    }
+  ],
+  "preview": "preview/city.png",
+  "perf_meta": {
+    "texture_tier": 1,
+    "poly_budget_hint": "low"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "pack_id": "core_pack",
+  "version": "0.1.0",
+  "tags": ["indoor", "basic", "prototype"],
+  "assets": [
+    {
+      "asset_id": "core_chair_01",
+      "label": "Simple Chair",
+      "tags": ["chair", "furniture", "indoor"]
+    },
+    {
+      "asset_id": "core_table_01",
+      "label": "Simple Table",
+      "tags": ["table", "furniture", "indoor"]
+    },
+    {
+      "asset_id": "core_lamp_01",
+      "label": "Standing Lamp",
+      "tags": ["lamp", "light", "indoor"]
+    }
+  ],
+  "preview": "preview/core.png",
+  "perf_meta": {
+    "texture_tier": 1,
+    "poly_budget_hint": "low"
+  }
+}
