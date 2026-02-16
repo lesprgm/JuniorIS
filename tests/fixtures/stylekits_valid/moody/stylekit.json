@@ -1,0 +1,14 @@
+{
+  "stylekit_id": "moody_evening",
+  "version": "0.1.0",
+  "tags": ["moody", "indoor", "night"],
+  "lighting": {
+    "preset": "evening_contrast",
+    "intensity": 0.65
+  },
+  "palette": {
+    "wall": "#2f3542",
+    "floor": "#3f3026",
+    "accent": "#ff6b6b"
+  }
+}

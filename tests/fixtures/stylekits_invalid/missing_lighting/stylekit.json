@@ -1,0 +1,10 @@
+{
+  "stylekit_id": "invalid_style",
+  "version": "0.1.0",
+  "tags": ["broken"],
+  "palette": {
+    "wall": "#ffffff",
+    "floor": "#111111",
+    "accent": "#ff0000"
+  }
+}

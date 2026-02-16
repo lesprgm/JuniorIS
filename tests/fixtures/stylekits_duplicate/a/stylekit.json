@@ -1,0 +1,14 @@
+{
+  "stylekit_id": "dup_stylekit",
+  "version": "0.1.0",
+  "tags": ["a"],
+  "lighting": {
+    "preset": "a",
+    "intensity": 1.0
+  },
+  "palette": {
+    "wall": "#111111",
+    "floor": "#222222",
+    "accent": "#333333"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "stylekit_id": "neutral_daylight",
+  "version": "0.1.0",
+  "tags": ["neutral", "indoor", "day"],
+  "lighting": {
+    "preset": "daylight_soft",
+    "intensity": 1.0
+  },
+  "palette": {
+    "wall": "#d8d8d8",
+    "floor": "#8b7d6b",
+    "accent": "#4a90e2"
+  },
+  "skybox": "clear_day",
+  "ambience": "quiet_room"
+}
