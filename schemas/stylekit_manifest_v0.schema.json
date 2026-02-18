@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StyleKit Manifest v0 (MVP)",
+  "type": "object",
+  "required": [
+    "stylekit_id",
+    "version",
+    "tags",
+    "lighting",
+    "palette"
+  ],
+  "properties": {
+    "stylekit_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "lighting": {
+      "type": "object",
+      "required": ["preset", "intensity"],
+      "properties": {
+        "preset": { "type": "string" },
+        "intensity": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "palette": {
+      "type": "object",
+      "required": ["wall", "floor", "accent"],
+      "properties": {
+        "wall": { "type": "string" },
+        "floor": { "type": "string" },
+        "accent": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "skybox": { "type": "string" },
+    "ambience": { "type": "string" },
+    "perf_overrides": { "type": "object" }
+  },
+  "additionalProperties": true
+}
