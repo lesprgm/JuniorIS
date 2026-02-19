@@ -58,5 +58,8 @@ year = {2024},
 pages = {21295--21304},
 doi = {10.1109/CVPR52733.2024.02012},
 url = {https://openaccess.thecvf.com/content/CVPR2024/html/Gao_GraphDreamer_Compositional_3D_Scene_Synthesis_from_Scene_Graphs_CVPR_2024_paper.html},
-urldate = {2026-02-19}
+urldate = {2026-02-19},
+annote  = {GraphDreamer proposes generating compositional 3D scenes from scene graphs, where objects are nodes and relationships are edges. The method addresses a common limitation in text-only conditioning for complex scenes by preserving explicit relational structure through the generation pipeline. It leverages pretrained text-to-image priors while introducing object-wise disentanglement and relationship-aware constraints, including mechanisms to reduce object interpenetration. The paper also demonstrates a practical route from natural language to structured graph input, then to 3D scene synthesis.
+The source is credible because it is peer-reviewed at CVPR 2024 and presents a clear problem definition, method, and empirical validation. It is especially relevant to this project because scene-graph conditioning mirrors the role of a structured intermediate representation in deterministic compilation.
+For Holodeck, GraphDreamer supports the idea that prompt parsing should produce explicit, machine-checkable structure before rendering. Its compositional approach maps well to a WorldSpec-like contract: entities, relations, and constraints are represented directly, which improves controllability, debugging, and reproducibility compared with unconstrained end-to-end generation.}
 }
