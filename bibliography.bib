@@ -72,5 +72,8 @@ publisher = {Curran Associates, Inc.},
 volume = {36},
 year = {2023},
 url = {https://papers.nips.cc/paper_files/paper/2023/hash/3a7f9e485845dac27423375c934cb4db-Abstract-Conference.html},
-urldate = {2026-02-19}
+urldate = {2026-02-19},
+annote  = {LayoutGPT investigates large language models as visual planners that convert natural-language prompts into structured layouts, reducing the burden of manual, low-level scene specification. The paper proposes in-context demonstrations in a stylesheet-like representation so an LLM can infer spatial and numerical constraints and output coherent compositions. The authors evaluate across multiple domains, including 3D indoor layout synthesis, and report competitive performance relative to supervised methods while maintaining high controllability for spatial relations.
+This is a strong scholarly source because it is a peer-reviewed NeurIPS 2023 contribution with broad experiments and direct baseline comparisons. It is relevant because it operationalizes an important separation of concerns: planning in symbolic/structured space first, then generation/rendering afterward.
+For the Holodeck architecture, LayoutGPT directly motivates the planner stage that maps prompt text into a schema-locked WorldSpec rather than raw geometry. Its results support using constrained intermediate outputs for reliability, explainability, and deterministic compilation, which are core requirements when building VR worlds that must satisfy walkability, safety, and runtime budget checks.}
 }
