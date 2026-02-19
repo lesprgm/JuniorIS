@@ -29,8 +29,15 @@ This connects to the Holodeck-like concept by providing a concrete example of de
   author    = {H{\"o}llein, Lukas and Cao, Ang and Owens, Andrew and Johnson, Justin and Nie{\ss}ner, Matthias},
   title     = {{Text2Room}: Extracting {Textured} {3D} {Meshes} from {2D} {Text} to {Image} {Models}},
   booktitle = {Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)},
+  publisher = {IEEE/CVF},
+  month     = {October},
   year      = {2023},
-  pages     = {7909--7920}
+  pages     = {7909--7920},
+  url       = {https://openaccess.thecvf.com/content/ICCV2023/html/Hollein_Text2Room_Extracting_Textured_3D_Meshes_from_2D_Text-to-Image_Models_ICCV_2023_paper.html},
+  urldate   = {2026-02-19},
+  annote    = {Text2Room presents a pipeline that transforms a text prompt into a room-scale textured 3D mesh by iteratively lifting outputs from text-to-image models into a multi-view consistent 3D representation. The method combines view synthesis, depth-based geometry reasoning, and texture projection to progressively build a coherent scene mesh, while enforcing cross-view consistency and reducing geometric drift. A major contribution is showing that strong 2D generative priors can be operationalized for 3D scene creation without requiring a fully trained end-to-end text-to-3D model.
+This is a strong scholarly source because it is a peer-reviewed ICCV 2023 paper with reproducible methodology, controlled comparisons, and detailed qualitative and quantitative analysis. It is highly relevant for prompt-to-world systems because it directly addresses the key engineering challenge of converting language-guided image priors into navigable 3D structure.
+For the Holodeck project, Text2Room informs the world-building side of the architecture: a planner can emit structured constraints while a generator reconstructs spatially consistent geometry from those constraints. Even if the MVP uses prefab composition, Text2Room provides a roadmap for future upgrades toward richer geometry synthesis while preserving deterministic compiler checks.}
 }
 
 @inproceedings{Zhang_2024_CVPR_SceneDreamer,
