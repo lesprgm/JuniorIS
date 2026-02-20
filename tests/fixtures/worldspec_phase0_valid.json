@@ -1,0 +1,30 @@
+{
+  "worldspec_version": "0.1",
+  "template_id": "room_basic",
+  "seed": 4242,
+  "stylekit_id": "neutral_daylight",
+  "pack_ids": ["core_pack"],
+  "placements": [
+    {
+      "asset_id": "core_table_01",
+      "transform": {
+        "pos": [0.5, 0.0, 0.4],
+        "rot": [0.0, 90.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "asset_id": "core_lamp_01",
+      "transform": {
+        "pos": [99.0, 2.0, -99.0],
+        "rot": [0.0, 15.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    }
+  ],
+  "budgets": {
+    "max_props": 4,
+    "max_texture_tier": 1,
+    "max_lights": 2
+  }
+}
