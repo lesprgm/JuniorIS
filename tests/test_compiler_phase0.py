@@ -19,6 +19,7 @@ def test_compile_phase0_success_writes_artifact(tmp_path):
     assert result["errors"] == []
     assert result["teleportable_surfaces"] == 1
     assert result["phase0_artifact"] is not None
+    assert result["safe_spawn"] is not None
 
     artifact_path = pathlib.Path(result["phase0_artifact"])
     assert artifact_path.exists()
@@ -30,6 +31,7 @@ def test_compile_phase0_success_writes_artifact(tmp_path):
         node["id"] == "floor" and node["teleportable"] is True
         for node in artifact["template"]["nodes"]
     )
+    assert artifact["safe_spawn"]["pos"][1] == 0.0
 
 
 def test_compile_phase0_invalid_worldspec_returns_structured_errors():
@@ -51,6 +53,7 @@ def test_compile_phase0_is_deterministic_for_same_input(tmp_path):
     assert second["ok"] is True
     assert first["world_id"] == second["world_id"]
     assert first["phase0_data"] == second["phase0_data"]
+    assert first["safe_spawn"] == second["safe_spawn"]
 
 
 def test_compile_phase0_clamps_out_of_bounds_floor_positions(tmp_path):
@@ -72,3 +75,23 @@ def test_compile_phase0_clamps_out_of_bounds_floor_positions(tmp_path):
     assert -max_x <= pos[0] <= max_x
     assert pos[1] == 0.0
     assert -max_z <= pos[2] <= max_z
+
+
+def test_compile_phase0_returns_safe_spawn_failure_when_room_is_fully_blocked():
+    worldspec = _load("worldspec_phase0_valid.json")
+    worldspec["placements"] = [
+        {
+            "asset_id": "core_table_01",
+            "transform": {
+                "pos": [0.0, 0.0, 0.0],
+                "rot": [0.0, 0.0, 0.0],
+                "scale": [64.0, 1.0, 64.0],
+            },
+        }
+    ]
+
+    result = compile_phase0(worldspec, write_artifact=False)
+    assert result["ok"] is False
+    assert result["phase0_artifact"] is None
+    assert result["safe_spawn"] is None
+    assert any(error["path"] == "$.safe_spawn" for error in result["errors"])

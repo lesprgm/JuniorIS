@@ -5,6 +5,7 @@ import json
 import pathlib
 from typing import Any, Dict, List
 
+from src.safe_spawn import find_safe_spawn
 from src.validate_worldspec import validate_worldspec
 from src.world_templates import build_template_geometry
 
@@ -91,6 +92,7 @@ def compile_phase0(
             "phase0_artifact": None,
             "teleportable_surfaces": 0,
             "errors": validation["errors"],
+            "safe_spawn": None,
         }
 
     template_id = str(worldspec.get("template_id", ""))
@@ -103,6 +105,7 @@ def compile_phase0(
             "phase0_artifact": None,
             "teleportable_surfaces": 0,
             "errors": [{"path": "$.template_id", "message": str(exc)}],
+            "safe_spawn": None,
         }
 
     dimensions = template["dimensions"]
@@ -123,6 +126,30 @@ def compile_phase0(
         },
     }
 
+    spawn_result = find_safe_spawn(phase0_data)
+    if not spawn_result["ok"]:
+        return {
+            "ok": False,
+            "world_id": world_id,
+            "phase0_artifact": None,
+            "teleportable_surfaces": _count_teleportable_surfaces(template),
+            "errors": [
+                {
+                    "path": "$.safe_spawn",
+                    "message": spawn_result["reason"],
+                }
+            ],
+            "phase0_data": phase0_data,
+            "safe_spawn": None,
+        }
+
+    phase0_data["safe_spawn"] = spawn_result["spawn"]
+    phase0_data["safe_spawn_meta"] = {
+        "attempts": spawn_result["attempts"],
+        "player_capsule_height": 1.70,
+        "player_capsule_radius": 0.25,
+    }
+
     artifact_path = None
     if write_artifact:
         output_path = pathlib.Path(build_root) / world_id / "phase0.json"
@@ -140,4 +167,5 @@ def compile_phase0(
         "teleportable_surfaces": _count_teleportable_surfaces(template),
         "errors": [],
         "phase0_data": phase0_data,
+        "safe_spawn": spawn_result["spawn"],
     }
