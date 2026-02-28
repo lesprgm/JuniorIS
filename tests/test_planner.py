@@ -1,5 +1,5 @@
 from src.pack_registry import load_pack_registry
-from src.planner import plan_worldspec
+from src.planner import _build_placements, plan_worldspec
 from src.stylekit_registry import load_stylekit_registry
 from src.validate_worldspec import validate_worldspec
 
@@ -48,3 +48,35 @@ def test_planner_is_deterministic_for_same_prompt_and_seed():
     assert first["ok"] is True
     assert second["ok"] is True
     assert first["worldspec"] == second["worldspec"]
+
+
+def test_planner_prefers_high_confidence_quest_safe_assets_when_rich_metadata_present():
+    candidate_assets = [
+        {
+            "asset_id": "unsafe_shell",
+            "label": "chair",
+            "tags": ["chair"],
+            "classification": "shell",
+            "quest_compatible": True,
+            "semantic_confidence": 0.99,
+        },
+        {
+            "asset_id": "unsafe_conf",
+            "label": "chair",
+            "tags": ["chair"],
+            "classification": "prop",
+            "quest_compatible": True,
+            "semantic_confidence": 0.40,
+        },
+        {
+            "asset_id": "safe_chair",
+            "label": "chair",
+            "tags": ["chair"],
+            "classification": "prop",
+            "quest_compatible": True,
+            "semantic_confidence": 0.95,
+        },
+    ]
+
+    placements = _build_placements(candidate_assets, {"chair"}, seed=1, max_props=3)
+    assert [p["asset_id"] for p in placements] == ["safe_chair"]
