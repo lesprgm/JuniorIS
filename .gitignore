@@ -238,6 +238,15 @@ pythontex-files-*/
 *.fff
 
 # Latexian
+
+# macOS
+.DS_Store
+
+# Spec X local/generated asset indexing + review artifacts
+data/
+
+# Local review UI static assets (kept local)
+scripts/review_ui/
 TSWLatexianTemp*
 
 ## Editors:
