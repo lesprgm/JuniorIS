@@ -95,3 +95,91 @@ def test_compile_phase0_returns_safe_spawn_failure_when_room_is_fully_blocked():
     assert result["phase0_artifact"] is None
     assert result["safe_spawn"] is None
     assert any(error["path"] == "$.safe_spawn" for error in result["errors"])
+
+
+def test_compile_phase0_substitutes_missing_asset_and_reports_it(tmp_path):
+    worldspec = _load("worldspec_phase0_valid.json")
+    worldspec["placements"] = [
+        {
+            "asset_id": "core_unknown_chair_42",
+            "tags": ["chair", "indoor"],
+            "transform": {
+                "pos": [0.0, 0.0, 0.0],
+                "rot": [0.0, 0.0, 0.0],
+                "scale": [1.0, 1.0, 1.0],
+            },
+        }
+    ]
+    worldspec["pack_ids"] = ["core_pack"]
+
+    result = compile_phase0(worldspec, build_root=tmp_path)
+    assert result["ok"] is True
+
+    placement = result["phase0_data"]["placements"][0]
+    assert placement["requested_asset_id"] == "core_unknown_chair_42"
+    assert placement["asset_id"] == "core_chair_01"
+    assert placement["resolution_type"] == "substitute"
+    assert placement["mode"] == "asset"
+
+    report = result["phase0_data"]["substitution_report"]
+    assert report["substitution_count"] == 1
+    assert report["resolution_counts"]["substitute"] == 1
+    assert report["substitutions"][0]["requested_asset_id"] == "core_unknown_chair_42"
+
+
+def test_compile_phase0_marks_placeholder_mode_for_placeholder_resolution(tmp_path):
+    worldspec = _load("worldspec_phase0_valid.json")
+    worldspec["placements"] = [
+        {
+            "asset_id": "core_unknown_rocket_99",
+            "tags": ["rocket", "spaceship"],
+            "transform": {
+                "pos": [0.0, 0.0, 0.0],
+                "rot": [0.0, 0.0, 0.0],
+                "scale": [1.0, 1.0, 1.0],
+            },
+        }
+    ]
+    worldspec["pack_ids"] = ["core_pack"]
+
+    result = compile_phase0(worldspec, build_root=tmp_path)
+    assert result["ok"] is True
+    placement = result["phase0_data"]["placements"][0]
+    assert placement["resolution_type"] == "placeholder"
+    assert placement["mode"] == "placeholder"
+
+
+def test_compile_phase0_passes_stylekit_theme_into_substitution(monkeypatch, tmp_path):
+    worldspec = _load("worldspec_phase0_valid.json")
+    worldspec["placements"] = [
+        {
+            "asset_id": "core_table_01",
+            "transform": {
+                "pos": [0.0, 0.0, 0.0],
+                "rot": [0.0, 0.0, 0.0],
+                "scale": [1.0, 1.0, 1.0],
+            },
+        }
+    ]
+
+    captured = {}
+
+    def _fake_resolve(**kwargs):
+        captured["room_theme"] = kwargs.get("room_theme")
+        return {
+            "resolved_asset_id": kwargs["requested_asset_id"],
+            "resolution_type": "exact",
+            "reason": "asset_found",
+            "coherence_checks": {
+                "visual_style_match": True,
+                "poly_style_match": True,
+                "theme_overlap_match": True,
+            },
+            "rejected_candidate_counts": {},
+        }
+
+    monkeypatch.setattr("src.compiler_phase0.resolve_asset_or_substitute", _fake_resolve)
+
+    result = compile_phase0(worldspec, build_root=tmp_path)
+    assert result["ok"] is True
+    assert "neutral" in (captured.get("room_theme") or {}).get("style_tags", [])

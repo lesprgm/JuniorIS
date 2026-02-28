@@ -32,7 +32,16 @@ def test_run_plan_and_compile_rejects_empty_prompt():
     result = api_server.run_plan_and_compile(prompt_text="", build_root="build_test")
     assert result["ok"] is False
     assert result["error_code"] == "invalid_request"
+    assert result["recoverable"] is True
+    assert result["details"] == result["errors"]
     assert any(error["path"] == "$.prompt_text" for error in result["errors"])
+
+
+def test_run_plan_and_compile_rejects_bool_seed():
+    result = api_server.run_plan_and_compile(prompt_text="test", optional_seed=True, build_root="build_test")
+    assert result["ok"] is False
+    assert result["error_code"] == "invalid_request"
+    assert any(error["path"] == "$.optional_seed" for error in result["errors"])
 
 
 def test_run_plan_and_compile_maps_planner_failures(monkeypatch, tmp_path):
@@ -45,6 +54,17 @@ def test_run_plan_and_compile_maps_planner_failures(monkeypatch, tmp_path):
     assert result["error_code"] == "planner_failed"
 
 
+def test_run_plan_and_compile_maps_unhandled_planner_exception(monkeypatch, tmp_path):
+    def fake_plan_worldspec(*args, **kwargs):
+        raise RuntimeError("planner crash")
+
+    monkeypatch.setattr(api_server, "plan_worldspec", fake_plan_worldspec)
+    result = api_server.run_plan_and_compile("test prompt", build_root=tmp_path)
+    assert result["ok"] is False
+    assert result["error_code"] == "internal_error"
+    assert any(error["path"] == "$.planner" for error in result["errors"])
+
+
 def test_run_plan_and_compile_maps_compile_failures(monkeypatch, tmp_path):
     def fake_compile_phase0(*args, **kwargs):
         return {"ok": False, "errors": [{"path": "$.safe_spawn", "message": "no_safe_spawn_found"}]}
@@ -52,7 +72,29 @@ def test_run_plan_and_compile_maps_compile_failures(monkeypatch, tmp_path):
     monkeypatch.setattr(api_server, "compile_phase0", fake_compile_phase0)
     result = api_server.run_plan_and_compile("test prompt", build_root=tmp_path)
     assert result["ok"] is False
-    assert result["error_code"] == "compile_failed"
+    assert result["error_code"] == "spawn_failed"
+
+
+def test_run_plan_and_compile_maps_unhandled_compile_exception(monkeypatch, tmp_path):
+    def fake_compile_phase0(*args, **kwargs):
+        raise RuntimeError("compile crash")
+
+    monkeypatch.setattr(api_server, "compile_phase0", fake_compile_phase0)
+    result = api_server.run_plan_and_compile("test prompt", build_root=tmp_path)
+    assert result["ok"] is False
+    assert result["error_code"] == "internal_error"
+    assert any(error["path"] == "$.compile" for error in result["errors"])
+
+
+def test_run_plan_and_compile_maps_manifest_failures(monkeypatch, tmp_path):
+    def fake_write_manifest(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(api_server, "_write_manifest", fake_write_manifest)
+    result = api_server.run_plan_and_compile("test prompt", build_root=tmp_path)
+    assert result["ok"] is False
+    assert result["error_code"] == "manifest_failed"
+    assert any(error["path"] == "$.manifest" for error in result["errors"])
 
 
 @pytest.mark.skipif(api_server.FastAPI is None, reason="FastAPI is not installed")
@@ -85,3 +127,18 @@ def test_fastapi_endpoint_invalid_request():
     payload = response.json()
     assert payload["ok"] is False
     assert payload["error_code"] == "invalid_request"
+
+
+@pytest.mark.skipif(api_server.FastAPI is None, reason="FastAPI is not installed")
+def test_fastapi_endpoint_spawn_failure_is_422(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    def fake_compile_phase0(*args, **kwargs):
+        return {"ok": False, "errors": [{"path": "$.safe_spawn", "message": "no_safe_spawn_found"}]}
+
+    monkeypatch.setattr(api_server, "compile_phase0", fake_compile_phase0)
+    client = TestClient(api_server.app)
+    response = client.post("/plan_and_compile", json={"prompt_text": "valid prompt"})
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["error_code"] == "spawn_failed"
