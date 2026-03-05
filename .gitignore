@@ -300,6 +300,11 @@ dist/
 venv/
 env/
 
+## Local environment secrets
+.env
+.env.local
+.env.*.local
+
 ## Unity (Quest/Unity project artifacts)
 Library/
 Temp/
