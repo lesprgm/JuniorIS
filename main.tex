@@ -48,10 +48,12 @@ A related body of work approaches structured scene representation through scene 
 
 All three systems treat generation as an offline or training-time problem, where compilation time and frame stability fall outside the design requirements. A user standing in a headset waiting for a portal to open operates under a different set of conditions. The system described in this paper sits within the asset-based tradition of Deitke et al. and Yang et al., adopting structured intermediate representations and constraint-driven compilation for the same reliability reasons, but applies them to a live interactive setting where those guarantees have to hold in real time~\cite{Deitke_2022_NeurIPS, Yang_2024_CVPR}. A deterministic fallback planner handles cases where the language model produces invalid output. A greybox-first compilation phase ensures a walkable world exists before visual assets begin streaming. A substitution system replaces missing assets with the closest tagged alternatives, keeping the pipeline moving regardless of asset coverage gaps. The contribution is a composition of these properties into a pipeline that maintains reliability guarantees under the constraints of a standalone VR headset.
 
-\section{Architecture Overview}
+\section{Methodology}
 \subsection{Client (VR application)}
+The client consists of the Unity-based VR runtime, the Creation Room, the in-world assistant panel, the portal transition system, and the destination-world executor. Together, these components handle prompt entry, user feedback, comfort-preserving movement, and the final handoff into the compiled world.
 
 \subsection{Backend (planning, compilation, and validation)}
+The backend consists of the planner, WorldSpec validator, pack and stylekit registries, substitution layer, safe-spawn search, and the phase0 compiler that writes the runtime contract. These components convert a prompt into a validated manifest and phase artifact that the Unity client can execute deterministically.
 
 \subsubsection{Planning}
 I will discuss how planning occurs in two stages: first, the language model converts a natural language prompt into a structured WorldSpec representation. This schema-locked output is validated against the WorldSpec schema to ensure it contains all required fields and adheres to expected formats. If the LLM output fails validation, a deterministic fallback planner generates a default WorldSpec based on the prompt's intent, ensuring the pipeline can proceed even under model failure.
@@ -60,6 +62,25 @@ I will discuss how compilation transforms a validated WorldSpec into a runtime-e
 
 \subsubsection{Validation}
 I will discuss how validation occurs at multiple stages in the pipeline. The WorldSpec output from the language model is first validated against its JSON schema to ensure structural correctness. During compilation, the greybox representation is validated for walkability, ensuring that all surfaces the user can step on are properly defined and free of gaps or obstacles. Performance constraints are also checked, including draw call limits and memory budgets, to ensure the resulting world can run smoothly on the target VR hardware.
+
+\subsection{Implementation}
+The most important design choices are to use an LLM for semantic planning while keeping compilation, validation, and runtime safety deterministic, and to rely on a reviewed asset pool instead of unconstrained generation for the MVP. A greybox-first compile stage, non-stacking floor placement, and explicit safe-spawn checks were chosen to preserve reliability and comfort on standalone VR hardware.
+
+\begin{figure}[h]
+    \centering
+    \fbox{\rule{0pt}{2in}\rule{0.85\linewidth}{0pt}}
+    \caption{Placeholder for the system implementation diagram showing the prompt-to-world pipeline.}
+    \label{fig:methodology-placeholder}
+\end{figure}
+
+\subsection{Research Questions and Goals}
+My research question is whether a prompt-driven system can convert natural language into a walkable VR world quickly enough to remain interactive while still enforcing safety, validity, and runtime constraints. The main goals are to generate a validated WorldSpec from a prompt, compile it into a room the user can safely enter, and measure whether this pipeline remains reliable on standalone VR hardware.
+
+\subsection{Data, Tools, and Systems}
+The system uses manually reviewed asset packs, stylekit manifests, WorldSpec and manifest JSON contracts, and compiled phase0 artifacts as its primary data sources. The implementation uses Unity with C\# and OpenXR on the client side, and Python modules for planning, validation, substitution, safe-spawn search, and compilation on the backend, with Gemini providing the semantic planning path.
+
+\subsection{Replication Requirements}
+To replicate the system, a developer would need the Unity project, the Python backend, the reviewed asset and stylekit manifests, a configured `.env` file for the LLM provider, and the dependencies listed in `requirements.txt`. They would also need a Quest-compatible OpenXR setup for runtime testing, although the backend contract generation can be reproduced from the terminal without the headset.
 
 
 
