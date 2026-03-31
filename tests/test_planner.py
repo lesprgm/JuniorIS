@@ -50,34 +50,30 @@ def test_planner_is_deterministic_for_same_prompt_and_seed():
     assert first["worldspec"] == second["worldspec"]
 
 
-def test_planner_creative_mode_emits_prompt_plan_and_variants():
+def test_planner_llm_mode_emits_prompt_plan_variants():
     result = plan_worldspec(
         "cozy indoor room with chair and lamp",
         seed=55,
-        user_prefs={"prompt_mode": "creative", "variant_index": 1},
+        user_prefs={"variant_index": 1},
     )
     assert result["ok"] is True
     plan = result["prompt_plan"]
-    assert plan["mode"] == "creative"
+    assert plan["mode"] == "llm"
     assert len(plan["creative_variants"]) >= 2
     assert plan["selected_variant_index"] == 1
     assert isinstance(plan["selected_prompt"], str)
     assert plan["selected_prompt"]
 
 
-def test_planner_literal_mode_skips_creative_expansion():
+def test_planner_rejects_non_llm_prompt_mode():
     result = plan_worldspec(
         "minimal studio room",
         seed=12,
-        user_prefs={"prompt_mode": "literal", "variant_index": 99},
+        user_prefs={"prompt_mode": "literal"},
     )
-    assert result["ok"] is True
-    plan = result["prompt_plan"]
-    assert plan["mode"] == "literal"
-    assert plan["strategy"] == "literal_only"
-    assert plan["creative_variants"] == ["minimal studio room"]
-    assert plan["selected_prompt"] == "minimal studio room"
-    assert plan["selected_variant_index"] == 0
+    assert result["ok"] is False
+    assert result["error_code"] == "invalid_prompt_mode"
+    assert any(err["path"] == "$.user_prefs.prompt_mode" for err in result["errors"])
 
 
 def test_planner_llm_mode_with_inline_plan_uses_llm_backend():
@@ -102,11 +98,11 @@ def test_planner_llm_mode_with_inline_plan_uses_llm_backend():
     assert all(p["asset_id"] in {"core_chair_01", "core_table_01"} for p in result["worldspec"]["placements"])
 
 
-def test_planner_strict_llm_mode_errors_when_llm_not_configured():
+def test_planner_llm_required_errors_when_llm_not_configured():
     result = plan_worldspec(
         "small room with lamp",
         seed=33,
-        user_prefs={"prompt_mode": "llm"},
+        user_prefs={"llm_required": True},
     )
     assert result["ok"] is False
     assert result["error_code"] == "llm_unavailable"
@@ -134,15 +130,49 @@ def test_planner_llm_unknown_asset_ids_are_rejected_and_fallback_used():
     assert all(p["asset_id"] != "nonexistent_asset_999" for p in result["worldspec"]["placements"])
 
 
-def test_planner_strict_llm_mode_surfaces_parse_errors(monkeypatch):
+def test_planner_llm_required_surfaces_parse_errors(monkeypatch):
     def fake_llm(*args, **kwargs):
         return {"ok": False, "error_code": "llm_parse_error", "message": "invalid JSON"}
 
     monkeypatch.setattr("src.planner.request_llm_plan", fake_llm)
-    result = plan_worldspec("room prompt", seed=9, user_prefs={"prompt_mode": "llm"})
+    result = plan_worldspec("room prompt", seed=9, user_prefs={"llm_required": True})
     assert result["ok"] is False
     assert result["error_code"] == "llm_parse_error"
     assert any(err["path"] == "$.llm" for err in result["errors"])
+
+
+def test_planner_llm_timeout_falls_back_when_not_strict(monkeypatch):
+    def fake_llm(*args, **kwargs):
+        return {"ok": False, "error_code": "llm_transport_error", "message": "timeout"}
+
+    monkeypatch.setattr("src.planner.request_llm_plan", fake_llm)
+    result = plan_worldspec("simple room with chair", seed=9, user_prefs={})
+    assert result["ok"] is True
+    assert result["planner_backend"] == "deterministic_fallback"
+    assert result["worldspec"]["placements"]
+
+
+def test_planner_semantic_receipts_present_by_default():
+    result = plan_worldspec("cozy room with chair and lamp", seed=21)
+    assert result["ok"] is True
+    assert "semantic_receipts" in result
+    receipts = result["semantic_receipts"]
+    assert isinstance(receipts, dict)
+    assert set(receipts.keys()) == {"selected_roles", "alternatives", "rationale", "confidence"}
+    assert isinstance(receipts["selected_roles"], dict)
+    assert isinstance(receipts["alternatives"], dict)
+    assert isinstance(receipts["rationale"], list)
+    assert isinstance(receipts["confidence"], float)
+
+
+def test_planner_semantic_receipts_omitted_when_disabled():
+    result = plan_worldspec(
+        "cozy room with chair and lamp",
+        seed=21,
+        user_prefs={"include_semantic_receipts": False},
+    )
+    assert result["ok"] is True
+    assert "semantic_receipts" not in result
 
 
 def test_planner_prefers_high_confidence_quest_safe_assets_when_rich_metadata_present():

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -10,8 +11,17 @@ from src.planner import plan_worldspec
 
 BUILD_ROOT = pathlib.Path("build")
 PORTAL_READY_PHASE = "phase0"
+API_CONTRACT_VERSION = "0.2"
 _ERROR_RECOVERABLE = {
     "invalid_request": True,
+    "planner_failed": True,
+    "compile_failed": True,
+    "spawn_failed": True,
+    "manifest_failed": True,
+    "internal_error": False,
+}
+_ERROR_RETRYABLE = {
+    "invalid_request": False,
     "planner_failed": True,
     "compile_failed": True,
     "spawn_failed": True,
@@ -24,24 +34,58 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _new_request_id() -> str:
+    return f"req_{uuid.uuid4().hex[:12]}"
+
+
+def _new_trace_id() -> str:
+    return f"trace_{uuid.uuid4().hex[:12]}"
+
+
 def _error(
     error_code: str,
     user_message: str,
+    request_id: str,
+    trace_id: str,
     errors: Optional[list[dict[str, Any]]] = None,
     extra: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     details = errors or []
+    retryable = _ERROR_RETRYABLE.get(error_code, False)
     payload: Dict[str, Any] = {
+        "api_contract_version": API_CONTRACT_VERSION,
         "ok": False,
+        "request_id": request_id,
+        "trace_id": trace_id,
         "error_code": error_code,
         "user_message": user_message,
         "recoverable": _ERROR_RECOVERABLE.get(error_code, False),
+        "retryable": retryable,
+        "retry_after_ms": 1000 if retryable else None,
         "details": details,
         "errors": details,
     }
     if isinstance(extra, dict):
         payload.update(extra)
     return payload
+
+
+def _build_readiness(compile_result: Dict[str, Any]) -> Dict[str, Any]:
+    # Unity only opens the portal once phase0 exists and a safe spawn was found.
+    phase0_ready = bool(compile_result.get("ok"))
+    safe_spawn_ready = isinstance(compile_result.get("safe_spawn"), dict)
+    blocked_reasons = []
+    if not phase0_ready:
+        blocked_reasons.append("phase0_not_ready")
+    if not safe_spawn_ready:
+        blocked_reasons.append("safe_spawn_not_ready")
+    portal_allowed = phase0_ready and safe_spawn_ready and not blocked_reasons
+    return {
+        "phase0_ready": phase0_ready,
+        "safe_spawn_ready": safe_spawn_ready,
+        "portal_allowed": portal_allowed,
+        "blocked_reasons": blocked_reasons,
+    }
 
 
 def _write_manifest(
@@ -53,6 +97,8 @@ def _write_manifest(
     planner_backend: Optional[str] = None,
     candidate_asset_ids: Optional[list[str]] = None,
 ) -> pathlib.Path:
+    # Keep the manifest narrow and runtime-focused so Unity does not need to
+    # understand the full backend planner/compiler internals.
     world_dir = build_root / world_id
     world_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = world_dir / "manifest.json"
@@ -98,11 +144,18 @@ def run_plan_and_compile(
     user_prefs: Optional[Dict[str, Any]] = None,
     build_root: pathlib.Path | str = BUILD_ROOT,
 ) -> Dict[str, Any]:
+    # Request-scoped ids start here so every downstream artifact and error
+    # response can be traced back to one submission.
+    request_id = _new_request_id()
+    trace_id = _new_trace_id()
+
     prompt = (prompt_text or "").strip()
     if not prompt:
         return _error(
             "invalid_request",
             "Prompt is empty.",
+            request_id,
+            trace_id,
             [{"path": "$.prompt_text", "message": "prompt_text must be a non-empty string"}],
         )
 
@@ -110,6 +163,8 @@ def run_plan_and_compile(
         return _error(
             "invalid_request",
             "Seed must be an integer.",
+            request_id,
+            trace_id,
             [{"path": "$.optional_seed", "message": "optional_seed must be an integer"}],
         )
 
@@ -117,23 +172,32 @@ def run_plan_and_compile(
         return _error(
             "invalid_request",
             "Seed is outside supported range.",
+            request_id,
+            trace_id,
             [{"path": "$.optional_seed", "message": "optional_seed must be between 0 and 2147483647"}],
         )
 
     normalized_prefs: Dict[str, Any] = user_prefs if isinstance(user_prefs, dict) else {}
 
     try:
+        # The planner owns semantic selection; compile_phase0 only sees a
+        # validated WorldSpec contract.
         planner_result = plan_worldspec(prompt, seed=optional_seed, user_prefs=normalized_prefs)
     except Exception:
         return _error(
             "internal_error",
             "Unexpected planner error.",
+            request_id,
+            trace_id,
             [{"path": "$.planner", "message": "unhandled planner exception"}],
         )
     prompt_plan = planner_result.get("prompt_plan") if isinstance(planner_result, dict) else None
     planner_backend = planner_result.get("planner_backend") if isinstance(planner_result, dict) else None
     candidate_asset_ids = (
         planner_result.get("candidate_asset_ids") if isinstance(planner_result, dict) else None
+    )
+    semantic_receipts = (
+        planner_result.get("semantic_receipts") if isinstance(planner_result, dict) else None
     )
     planner_extra: Dict[str, Any] = {}
     if isinstance(prompt_plan, dict):
@@ -142,6 +206,8 @@ def run_plan_and_compile(
         planner_extra["planner_backend"] = planner_backend
     if isinstance(candidate_asset_ids, list):
         planner_extra["candidate_asset_ids"] = candidate_asset_ids
+    if isinstance(semantic_receipts, dict):
+        planner_extra["semantic_receipts"] = semantic_receipts
     planner_error_code = planner_result.get("error_code") if isinstance(planner_result, dict) else None
     if not planner_result.get("ok"):
         user_message = "Could not build a valid world plan for this prompt."
@@ -150,6 +216,8 @@ def run_plan_and_compile(
         return _error(
             "planner_failed",
             user_message,
+            request_id,
+            trace_id,
             planner_result.get("errors", []),
             extra={
                 **planner_extra,
@@ -164,6 +232,8 @@ def run_plan_and_compile(
         return _error(
             "planner_failed",
             "Planner returned an invalid world specification.",
+            request_id,
+            trace_id,
             [{"path": "$.worldspec", "message": "planner result missing worldspec object"}],
             extra=planner_extra,
         )
@@ -174,6 +244,8 @@ def run_plan_and_compile(
         return _error(
             "internal_error",
             "Unexpected compiler error.",
+            request_id,
+            trace_id,
             [{"path": "$.compile", "message": "unhandled compiler exception"}],
         )
     if not compile_result.get("ok"):
@@ -185,7 +257,10 @@ def run_plan_and_compile(
         return _error(
             "spawn_failed" if has_spawn_error else "compile_failed",
             "World spawn preparation failed." if has_spawn_error else "World compilation failed before destination was playable.",
+            request_id,
+            trace_id,
             compile_errors,
+            extra=planner_extra if planner_extra else None,
         )
 
     world_id = str(compile_result["world_id"])
@@ -203,21 +278,30 @@ def run_plan_and_compile(
         return _error(
             "manifest_failed",
             "Could not write world manifest.",
+            request_id,
+            trace_id,
             [{"path": "$.manifest", "message": str(exc)}],
         )
     except Exception:
         return _error(
             "internal_error",
             "Unexpected manifest error.",
+            request_id,
+            trace_id,
             [{"path": "$.manifest", "message": "unhandled manifest exception"}],
         )
 
+    readiness = _build_readiness(compile_result)
     response = {
+        "api_contract_version": API_CONTRACT_VERSION,
         "ok": True,
+        "request_id": request_id,
+        "trace_id": trace_id,
         "world_id": world_id,
         "manifest_url": f"/build/{world_id}/manifest.json",
         "manifest_path": str(manifest_path),
         "portal_ready_at_phase": PORTAL_READY_PHASE,
+        "readiness": readiness,
         "errors": [],
     }
     if isinstance(prompt_plan, dict):
@@ -227,6 +311,8 @@ def run_plan_and_compile(
         response["planner_backend"] = planner_backend
     if isinstance(candidate_asset_ids, list):
         response["candidate_asset_ids"] = candidate_asset_ids
+    if isinstance(semantic_receipts, dict):
+        response["semantic_receipts"] = semantic_receipts
     return response
 
 
@@ -239,6 +325,7 @@ except ImportError:  # pragma: no cover - optional dependency for API serving
     BaseModel = object
     Field = None
     JSONResponse = None
+    app = None
 
 
 if FastAPI is not None:
@@ -248,7 +335,7 @@ if FastAPI is not None:
         user_prefs: Dict[str, Any] = Field(default_factory=dict)
 
 
-    app = FastAPI(title="JuniorIS Planner/Compiler API", version="0.1")
+    app = FastAPI(title="JuniorIS Planner/Compiler API", version=API_CONTRACT_VERSION)
 
     @app.post("/plan_and_compile")
     def plan_and_compile(payload: PlanAndCompileRequest):
