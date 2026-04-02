@@ -50,26 +50,23 @@ All three systems treat generation as an offline or training-time problem, where
 
 \section{Methodology}
 \subsection{Client (VR application)}
-The client consists of the Unity-based VR runtime, the Creation Room, the in-world assistant panel, the portal transition system, and the destination-world executor. Together, these components handle prompt entry, user feedback, comfort-preserving movement, and the final handoff into the compiled world.
+The client consists of the Unity-based VR runtime, the Creation Room, the in-world assistant panel, the portal transition system, and the destination-world executor. Together, these components handle prompt entry, user feedback, comfort-preserving movement, and the final handoff into the compiled world. The client also enforces the runtime interaction contract by reading backend-produced manifest and phase artifacts, preparing the portal only after a valid destination is available, and relocating the XR origin to a validated safe spawn point on entry. At runtime, the client applies comfort and presentation logic such as teleport-surface enforcement, destination-world polish, and return-home transitions while keeping headset-side behavior deterministic.
 
 \subsection{Backend (planning, compilation, and validation)}
 The backend consists of the planner, WorldSpec validator, pack and stylekit registries, substitution layer, safe-spawn search, and the phase0 compiler that writes the runtime contract. These components convert a prompt into a validated manifest and phase artifact that the Unity client can execute deterministically.
 
-\subsubsection{Planning}
-I will discuss how planning occurs in two stages: first, the language model converts a natural language prompt into a structured WorldSpec representation. This schema-locked output is validated against the WorldSpec schema to ensure it contains all required fields and adheres to expected formats. If the LLM output fails validation, a deterministic fallback planner generates a default WorldSpec based on the prompt's intent, ensuring the pipeline can proceed even under model failure.
-\subsubsection{Compilation}
-I will discuss how compilation transforms a validated WorldSpec into a runtime-executable world bundle. The compiler first generates a greybox representation of the world, which is a simplified geometry that defines walkable surfaces and spatial layout without visual detail. This greybox is validated for walkability and performance constraints before any visual assets are loaded. Once the greybox is confirmed to be stable, the compiler proceeds to stream in visual assets according to the WorldSpec, upgrading the environment's appearance in phases while maintaining a walkable experience throughout.
+\subsubsection{Backend Pipeline}
+Planning occurs in two stages. First, the language model converts the prompt into a structured intent and selection proposal over a safe, indexed asset shortlist, producing a schema-constrained WorldSpec rather than geometry directly. If the semantic path fails or returns invalid identifiers, the request either fails explicitly or enters a deterministic fallback path only when that policy is enabled.
 
-\subsubsection{Validation}
-I will discuss how validation occurs at multiple stages in the pipeline. The WorldSpec output from the language model is first validated against its JSON schema to ensure structural correctness. During compilation, the greybox representation is validated for walkability, ensuring that all surfaces the user can step on are properly defined and free of gaps or obstacles. Performance constraints are also checked, including draw call limits and memory budgets, to ensure the resulting world can run smoothly on the target VR hardware.
+Compilation transforms the validated WorldSpec into a runtime-executable bundle. The compiler resolves missing assets through constrained substitution, builds a greybox destination shell, solves legal placements under deterministic constraints, computes a safe spawn, and writes the manifest and phase0 artifact that Unity consumes at runtime. Validation occurs throughout this pipeline: schema checks reject malformed WorldSpecs, placement solving enforces walkability and non-overlap constraints, and budget checks preserve Quest-compatible runtime performance before the portal is allowed to open.
 
 \subsection{Implementation}
 The most important design choices are to use an LLM for semantic planning while keeping compilation, validation, and runtime safety deterministic, and to rely on a reviewed asset pool instead of unconstrained generation for the MVP. A greybox-first compile stage, non-stacking floor placement, and explicit safe-spawn checks were chosen to preserve reliability and comfort on standalone VR hardware.
 
 \begin{figure}[h]
     \centering
-    \fbox{\rule{0pt}{2in}\rule{0.85\linewidth}{0pt}}
-    \caption{Placeholder for the system implementation diagram showing the prompt-to-world pipeline.}
+    \includegraphics[width=0.92\linewidth]{imgs/Simplified_Architecture.png}
+    \caption{Simplified system architecture for the prompt-to-world pipeline, showing the client, backend compiler pipeline, and runtime handoff.}
     \label{fig:methodology-placeholder}
 \end{figure}
 
