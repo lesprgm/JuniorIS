@@ -44,6 +44,30 @@ def validate_worldspec(data: Dict[str, Any]) -> Dict[str, Any]:
                 "message": err.message,
             }
         )
+    placements = data.get("placements")
+    if isinstance(placements, list):
+        for index, placement in enumerate(placements):
+            if not isinstance(placement, dict):
+                continue
+            constraint = placement.get("constraint")
+            if not isinstance(constraint, dict):
+                continue
+            constraint_type = str(constraint.get("type", "")).strip().lower()
+            if constraint_type == "near" and not str(constraint.get("target", "")).strip():
+                errors.append(
+                    {
+                        "path": f"$.placements[{index}].constraint.target",
+                        "message": "near constraints require a target role or asset id",
+                    }
+                )
+            distance = constraint.get("distance")
+            if constraint_type == "near" and distance is not None and not isinstance(distance, (int, float)):
+                errors.append(
+                    {
+                        "path": f"$.placements[{index}].constraint.distance",
+                        "message": "near constraint distance must be numeric",
+                    }
+                )
     return {"ok": len(errors) == 0, "errors": errors}
 
 
