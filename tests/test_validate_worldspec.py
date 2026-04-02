@@ -37,3 +37,19 @@ def test_worldspec_invalid_placement():
     result = validate_worldspec(data)
     assert result["ok"] is False
     assert any("asset_id" in e["message"] for e in result["errors"])
+
+
+def test_worldspec_near_constraint_requires_target():
+    data = _load("worldspec_valid.json")
+    data["placements"][0]["constraint"] = {"type": "near"}
+    result = validate_worldspec(data)
+    assert result["ok"] is False
+    assert any(error["path"] == "$.placements[0].constraint.target" for error in result["errors"])
+
+
+def test_worldspec_near_constraint_requires_numeric_distance():
+    data = _load("worldspec_valid.json")
+    data["placements"][0]["constraint"] = {"type": "near", "target": "table", "distance": "close"}
+    result = validate_worldspec(data)
+    assert result["ok"] is False
+    assert any(error["path"] == "$.placements[0].constraint.distance" for error in result["errors"])

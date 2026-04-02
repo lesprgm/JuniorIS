@@ -13,6 +13,8 @@ def _load(name: str):
 
 def test_compile_phase0_success_writes_artifact(tmp_path):
     worldspec = _load("worldspec_phase0_valid.json")
+    worldspec["placement_intent"] = {"density_profile": "normal", "anchor_preferences": [], "adjacency_pairs": [], "layout_mood": "cozy"}
+    worldspec["placement_plan"] = {"target_count": 2, "derived_capacity": 4}
     result = compile_phase0(worldspec, build_root=tmp_path)
 
     assert result["ok"] is True
@@ -32,6 +34,7 @@ def test_compile_phase0_success_writes_artifact(tmp_path):
         for node in artifact["template"]["nodes"]
     )
     assert artifact["safe_spawn"]["pos"][1] == 0.0
+    assert artifact["placement_policy"]["intent"]["density_profile"] == "normal"
 
 
 def test_compile_phase0_invalid_worldspec_returns_structured_errors():
@@ -111,6 +114,7 @@ def test_compile_phase0_substitutes_missing_asset_and_reports_it(tmp_path):
         }
     ]
     worldspec["pack_ids"] = ["core_pack"]
+    worldspec["planner_policy"] = {"allow_heuristic_fallback": True}
 
     result = compile_phase0(worldspec, build_root=tmp_path)
     assert result["ok"] is True
@@ -176,6 +180,10 @@ def test_compile_phase0_passes_stylekit_theme_into_substitution(monkeypatch, tmp
                 "theme_overlap_match": True,
             },
             "rejected_candidate_counts": {},
+            "alternatives": [],
+            "rationale": [],
+            "selection_backend": "semantic",
+            "semantic_failure_reason": None,
         }
 
     monkeypatch.setattr("src.compiler_phase0.resolve_asset_or_substitute", _fake_resolve)
@@ -183,3 +191,116 @@ def test_compile_phase0_passes_stylekit_theme_into_substitution(monkeypatch, tmp
     result = compile_phase0(worldspec, build_root=tmp_path)
     assert result["ok"] is True
     assert "neutral" in (captured.get("room_theme") or {}).get("style_tags", [])
+
+
+def test_compile_phase0_places_against_wall_constraints_near_room_edges(tmp_path):
+    worldspec = _load("worldspec_phase0_valid.json")
+    worldspec["placements"] = [
+        {
+            "asset_id": "core_table_01",
+            "constraint": {"type": "against_wall"},
+            "transform": {"pos": [0.0, 0.0, 0.0], "rot": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+        }
+    ]
+
+    result = compile_phase0(worldspec, build_root=tmp_path)
+    assert result["ok"] is True
+    position = result["phase0_data"]["placements"][0]["transform"]["pos"]
+    assert abs(position[0]) > 2.5 or abs(position[2]) > 2.5
+
+
+def test_compile_phase0_places_near_constraints_close_to_target(tmp_path):
+    worldspec = _load("worldspec_phase0_valid.json")
+    worldspec["placements"] = [
+        {
+            "asset_id": "core_table_01",
+            "constraint": {"type": "against_wall"},
+            "transform": {"pos": [0.0, 0.0, 0.0], "rot": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+        },
+        {
+            "asset_id": "core_chair_01",
+            "constraint": {"type": "near", "target": "core_table_01", "distance": 1.2},
+            "transform": {"pos": [0.0, 0.0, 0.0], "rot": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+        },
+    ]
+
+    result = compile_phase0(worldspec, build_root=tmp_path)
+    assert result["ok"] is True
+    table = result["phase0_data"]["placements"][0]["transform"]["pos"]
+    chair = result["phase0_data"]["placements"][1]["transform"]["pos"]
+    dx = table[0] - chair[0]
+    dz = table[2] - chair[2]
+    assert (dx * dx + dz * dz) ** 0.5 <= 2.25
+
+
+def test_compile_phase0_geometry_profile_affects_near_spacing(tmp_path):
+    small = _load("worldspec_phase0_valid.json")
+    small["placements"] = [
+        {
+            "asset_id": "core_table_01",
+            "constraint": {"type": "against_wall"},
+            "geometry_profile": {"footprint_radius": 0.55, "wall_clearance": 0.2, "preferred_near_distance": 0.9, "collision_padding_class": "compact", "placement_role": "table"},
+            "transform": {"pos": [0.0, 0.0, 0.0], "rot": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+        },
+        {
+            "asset_id": "core_chair_01",
+            "constraint": {"type": "near", "target": "core_table_01"},
+            "geometry_profile": {"footprint_radius": 0.35, "wall_clearance": 0.15, "preferred_near_distance": 0.8, "collision_padding_class": "compact", "placement_role": "chair"},
+            "transform": {"pos": [0.0, 0.0, 0.0], "rot": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+        },
+    ]
+    large = _load("worldspec_phase0_valid.json")
+    large["placements"] = [
+        {
+            "asset_id": "core_table_01",
+            "constraint": {"type": "against_wall"},
+            "geometry_profile": {"footprint_radius": 1.1, "wall_clearance": 0.3, "preferred_near_distance": 1.4, "collision_padding_class": "wide", "placement_role": "table"},
+            "transform": {"pos": [0.0, 0.0, 0.0], "rot": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+        },
+        {
+            "asset_id": "core_chair_01",
+            "constraint": {"type": "near", "target": "core_table_01"},
+            "geometry_profile": {"footprint_radius": 0.75, "wall_clearance": 0.25, "preferred_near_distance": 1.1, "collision_padding_class": "standard", "placement_role": "chair"},
+            "transform": {"pos": [0.0, 0.0, 0.0], "rot": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+        },
+    ]
+
+    small_result = compile_phase0(small, build_root=tmp_path / "small")
+    large_result = compile_phase0(large, build_root=tmp_path / "large")
+    assert small_result["ok"] is True
+    assert large_result["ok"] is True
+
+    small_table = small_result["phase0_data"]["placements"][0]["transform"]["pos"]
+    small_chair = small_result["phase0_data"]["placements"][1]["transform"]["pos"]
+    large_table = large_result["phase0_data"]["placements"][0]["transform"]["pos"]
+    large_chair = large_result["phase0_data"]["placements"][1]["transform"]["pos"]
+    small_distance = ((small_table[0] - small_chair[0]) ** 2 + (small_table[2] - small_chair[2]) ** 2) ** 0.5
+    large_distance = ((large_table[0] - large_chair[0]) ** 2 + (large_table[2] - large_chair[2]) ** 2) ** 0.5
+    assert large_distance > small_distance
+
+
+def test_compile_phase0_skips_unsatisfiable_constraints_without_failing_world(tmp_path):
+    worldspec = _load("worldspec_phase0_valid.json")
+    worldspec["placements"] = [
+        {
+            "asset_id": "core_table_01",
+            "constraint": {"type": "against_wall"},
+            "transform": {"pos": [0.0, 0.0, 0.0], "rot": [0.0, 0.0, 0.0], "scale": [3.0, 1.0, 3.0]},
+        },
+        {
+            "asset_id": "core_lamp_01",
+            "constraint": {"type": "near", "target": "missing_anchor", "distance": 1.2},
+            "transform": {"pos": [0.0, 0.0, 0.0], "rot": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+        },
+        {
+            "asset_id": "core_chair_01",
+            "constraint": {"type": "against_wall"},
+            "transform": {"pos": [0.0, 0.0, 0.0], "rot": [0.0, 0.0, 0.0], "scale": [3.0, 1.0, 3.0]},
+        },
+    ]
+
+    result = compile_phase0(worldspec, build_root=tmp_path)
+    assert result["ok"] is True
+    solver_report = result["phase0_data"]["substitution_report"]["placement_solver"]
+    assert solver_report["fallback_count"] >= 1
+    assert result["phase0_data"]["constraints"]["placement_constraints_enabled"] is True
