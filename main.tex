@@ -62,6 +62,7 @@ Compilation transforms the validated WorldSpec into a runtime-executable bundle.
 
 \subsection{Implementation}
 The most important design choices are to use an LLM for semantic planning while keeping compilation, validation, and runtime safety deterministic, and to rely on a reviewed asset pool instead of unconstrained generation for the MVP. A greybox-first compile stage, non-stacking floor placement, and explicit safe-spawn checks were chosen to preserve reliability and comfort on standalone VR hardware.
+Figure~\ref{fig:methodology-placeholder} gives a simple view of how the client, backend, and runtime parts of the system connect.
 
 \begin{figure}[h]
     \centering
@@ -78,6 +79,12 @@ The system uses manually reviewed asset packs, stylekit manifests, WorldSpec and
 
 \subsection{Replication Requirements}
 To replicate the system, a developer would need the Unity project, the Python backend, the reviewed asset and stylekit manifests, a configured `.env` file for the LLM provider, and the dependencies listed in `requirements.txt`. They would also need a Quest-compatible OpenXR setup for runtime testing, although the backend contract generation can be reproduced from the terminal without the headset.
+
+\section{Results and Findings}
+This section will show what the system actually produced during testing, including whether prompts turned into valid room contracts, whether compilation succeeded, and how long it took before a walkable room was ready. It will also look at whether the generated rooms matched the general intent of the prompt and whether the portal, safe spawn, and placement checks worked consistently.
+
+\section{Discussion}
+This section will talk about what worked, what still feels limited, and where the tradeoffs showed up most clearly in the project. In particular, it will reflect on the decision to let the LLM handle meaning while keeping validation, placement, and runtime safety deterministic, and it will discuss current limits such as asset coverage, provider reliability, and visual richness.
 
 
 
