@@ -6,12 +6,15 @@ import pathlib
 from collections import Counter
 from typing import Any, Dict, List, Tuple
 
-from src.pack_registry import load_pack_registry
-from src.safe_spawn import find_safe_spawn
-from src.stylekit_registry import load_stylekit_registry
-from src.substitution import resolve_asset_or_substitute
-from src.validate_worldspec import validate_worldspec
-from src.world_templates import build_template_geometry
+from src.catalog.pack_registry import load_pack_registry
+from src.planning.assets import collect_assets
+from src.placement.policy import geometry_profile_from_asset
+from src.placement.solver import solve_placement_layout
+from src.runtime.safe_spawn import find_safe_spawn
+from src.catalog.stylekit_registry import load_stylekit_registry
+from src.selection.substitution import resolve_asset_or_substitute
+from src.world.validation import validate_worldspec
+from src.world.templates import build_template_geometry
 
 
 def _stable_json_payload(data: Dict[str, Any]) -> str:
@@ -42,13 +45,85 @@ def _clamp_floor_position(position: List[float], dimensions: Dict[str, float]) -
     return [round(x, 3), 0.0, round(z, 3)]
 
 
+def _compiled_transform(
+    position: List[float],
+    rotation: List[float],
+    scale: List[float],
+    dimensions: Dict[str, float],
+) -> Dict[str, List[float]]:
+    return {
+        "pos": _clamp_floor_position(position, dimensions),
+        "rot": [round(rotation[0], 3), round(rotation[1], 3), round(rotation[2], 3)],
+        "scale": [round(scale[0], 3), round(scale[1], 3), round(scale[2], 3)],
+    }
+
+
+def _substitution_entry(
+    *,
+    requested_asset_id: str,
+    resolved_asset_id: str,
+    resolution_type: str,
+    reason: str,
+    resolution: Dict[str, Any],
+    coherence_checks: Dict[str, Any],
+    rejected_counts: Dict[str, Any],
+) -> Dict[str, Any]:
+    return {
+        "requested_asset_id": requested_asset_id,
+        "resolved_asset_id": resolved_asset_id,
+        "resolution_type": resolution_type,
+        "reason": reason,
+        "coherence_checks": coherence_checks,
+        "rejected_candidate_counts": rejected_counts,
+        "alternatives": resolution.get("alternatives", []),
+        "rationale": resolution.get("rationale", []),
+        "selection_backend": resolution.get("selection_backend"),
+        "semantic_failure_reason": resolution.get("semantic_failure_reason"),
+    }
+
+
+def _compiled_input(
+    *,
+    index: int,
+    placement: Dict[str, Any],
+    requested_asset_id: str,
+    resolved_asset_id: str,
+    resolution_type: str,
+    reason: str,
+    requested_tags: List[Any],
+    position: List[float],
+    rotation: List[float],
+    scale: List[float],
+    dimensions: Dict[str, float],
+    asset_record: Dict[str, Any],
+) -> Dict[str, Any]:
+    geometry_profile = (
+        dict(placement["geometry_profile"])
+        if isinstance(placement.get("geometry_profile"), dict)
+        else geometry_profile_from_asset(asset_record, scale=scale)
+    )
+    return {
+        "placement_id": f"placement_{index:03d}",
+        "asset_id": resolved_asset_id,
+        "requested_asset_id": requested_asset_id,
+        "resolution_type": resolution_type,
+        "substitution_reason": reason,
+        "mode": "placeholder" if resolution_type == "placeholder" else "asset",
+        "tags": requested_tags,
+        "constraint": placement.get("constraint"),
+        "geometry_profile": geometry_profile,
+        "transform": _compiled_transform(position, rotation, scale, dimensions),
+    }
+
+
 def _compile_placements(
     raw_placements: List[Dict[str, Any]],
     dimensions: Dict[str, float],
     pack_ids: List[str],
     room_theme: Dict[str, Any],
+    seed: int,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    compiled: List[Dict[str, Any]] = []
+    compiled_inputs: List[Dict[str, Any]] = []
     substitution_entries: List[Dict[str, Any]] = []
     resolution_counts: Counter[str] = Counter()
     rejected_candidate_counts: Counter[str] = Counter()
@@ -56,6 +131,12 @@ def _compile_placements(
     registry = load_pack_registry()
     if not pack_ids:
         pack_ids = sorted(registry.packs_by_id.keys())
+    available_assets = collect_assets(pack_ids, registry) or collect_assets([], registry)
+    available_by_id = {
+        str(asset.get("asset_id", "")): asset
+        for asset in available_assets
+        if isinstance(asset, dict) and asset.get("asset_id")
+    }
 
     for index, placement in enumerate(raw_placements):
         if not isinstance(placement, dict):
@@ -105,41 +186,50 @@ def _compile_placements(
         resolution_counts[resolution_type] += 1
         if resolution_type in {"substitute", "placeholder"}:
             substitution_entries.append(
-                {
-                    "requested_asset_id": requested_asset_id,
-                    "resolved_asset_id": resolved_asset_id,
-                    "resolution_type": resolution_type,
-                    "reason": reason,
-                    "coherence_checks": coherence_checks,
-                    "rejected_candidate_counts": rejected_counts,
-                }
+                _substitution_entry(
+                    requested_asset_id=requested_asset_id,
+                    resolved_asset_id=resolved_asset_id,
+                    resolution_type=resolution_type,
+                    reason=reason,
+                    resolution=resolution,
+                    coherence_checks=coherence_checks,
+                    rejected_counts=rejected_counts,
+                )
             )
 
-        compiled.append(
-            {
-                "placement_id": f"placement_{index:03d}",
-                "asset_id": resolved_asset_id,
-                "requested_asset_id": requested_asset_id,
-                "resolution_type": resolution_type,
-                "substitution_reason": reason,
-                "mode": "placeholder" if resolution_type == "placeholder" else "asset",
-                "transform": {
-                    "pos": _clamp_floor_position(position, dimensions),
-                    "rot": [round(rotation[0], 3), round(rotation[1], 3), round(rotation[2], 3)],
-                    "scale": [round(scale[0], 3), round(scale[1], 3), round(scale[2], 3)],
-                },
-            }
+        compiled_inputs.append(
+            _compiled_input(
+                index=index,
+                placement=placement,
+                requested_asset_id=requested_asset_id,
+                resolved_asset_id=resolved_asset_id,
+                resolution_type=resolution_type,
+                reason=reason,
+                requested_tags=requested_meta["tags"],
+                position=position,
+                rotation=rotation,
+                scale=scale,
+                dimensions=dimensions,
+                asset_record=available_by_id.get(resolved_asset_id, placement),
+            )
         )
 
+    compiled, solver_report = solve_placement_layout(compiled_inputs, dimensions, seed)
     report = {
         "total_placements": len(compiled),
         "resolution_counts": dict(resolution_counts),
         "substitution_count": len(substitution_entries),
         "substitutions": substitution_entries,
         "rejected_candidate_counts": dict(rejected_candidate_counts),
+        "placement_solver": solver_report,
     }
 
     return compiled, report
+
+
+def _planner_policy(worldspec: Dict[str, Any]) -> Dict[str, Any]:
+    policy = worldspec.get("planner_policy")
+    return dict(policy) if isinstance(policy, dict) else {}
 
 
 def _derive_room_theme(worldspec: Dict[str, Any]) -> Dict[str, Any]:
@@ -203,7 +293,16 @@ def compile_phase0(
     pack_ids = worldspec.get("pack_ids")
     pack_ids = pack_ids if isinstance(pack_ids, list) else []
     room_theme = _derive_room_theme(worldspec)
-    placements, substitution_report = _compile_placements(raw_placements, dimensions, pack_ids, room_theme)
+    planner_policy = _planner_policy(worldspec)
+    placement_intent = worldspec.get("placement_intent") if isinstance(worldspec.get("placement_intent"), dict) else {}
+    placement_plan = worldspec.get("placement_plan") if isinstance(worldspec.get("placement_plan"), dict) else {}
+    placements, substitution_report = _compile_placements(
+        raw_placements,
+        dimensions,
+        pack_ids,
+        room_theme,
+        int(worldspec.get("seed", 0)),
+    )
 
     world_id = _build_world_id(worldspec)
     phase0_data = {
@@ -215,6 +314,12 @@ def compile_phase0(
         "constraints": {
             "floor_anchored_only": True,
             "stacking_enabled": False,
+            "placement_constraints_enabled": True,
+        },
+        "placement_policy": {
+            "intent": placement_intent,
+            "plan": placement_plan,
+            "placed_count": len(placements),
         },
         "substitution_report": substitution_report,
     }

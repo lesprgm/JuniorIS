@@ -6,8 +6,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from src.compiler_phase0 import compile_phase0
-from src.planner import plan_worldspec
+from src.compilation.phase0 import compile_phase0
+from src.planning.planner import plan_worldspec
+from src.contracts.runtime import resolve_stylekit_runtime_payload
 
 BUILD_ROOT = pathlib.Path("build")
 PORTAL_READY_PHASE = "phase0"
@@ -70,6 +71,43 @@ def _error(
     return payload
 
 
+def _planner_response_fields(planner_result: Dict[str, Any]) -> Dict[str, Any]:
+    fields: Dict[str, Any] = {}
+    for key, expected_type in (
+        ("prompt_plan", dict),
+        ("planner_backend", str),
+        ("candidate_asset_ids", list),
+        ("semantic_receipts", dict),
+        ("semantic_path_status", str),
+        ("fallback_used", bool),
+    ):
+        value = planner_result.get(key)
+        if isinstance(value, expected_type):
+            fields[key] = value
+
+    fallback_reason = planner_result.get("fallback_reason")
+    if fallback_reason is None or isinstance(fallback_reason, str):
+        fields["fallback_reason"] = fallback_reason
+    return fields
+
+
+def _planner_context(planner_result: Dict[str, Any]) -> tuple[Dict[str, Any], str | None]:
+    return _planner_response_fields(planner_result), planner_result.get("error_code")
+
+
+def _prompt_plan_manifest(prompt_plan: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "mode": prompt_plan.get("mode"),
+        "strategy": prompt_plan.get("strategy"),
+        "selected_prompt": prompt_plan.get("selected_prompt"),
+        "selected_variant_index": prompt_plan.get("selected_variant_index"),
+    }
+
+
+def _normalized_manifest_object(value: Any) -> Dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
 def _build_readiness(compile_result: Dict[str, Any]) -> Dict[str, Any]:
     # Unity only opens the portal once phase0 exists and a safe spawn was found.
     phase0_ready = bool(compile_result.get("ok"))
@@ -96,6 +134,9 @@ def _write_manifest(
     prompt_plan: Optional[Dict[str, Any]] = None,
     planner_backend: Optional[str] = None,
     candidate_asset_ids: Optional[list[str]] = None,
+    semantic_path_status: Optional[str] = None,
+    fallback_used: Optional[bool] = None,
+    fallback_reason: Optional[str] = None,
 ) -> pathlib.Path:
     # Keep the manifest narrow and runtime-focused so Unity does not need to
     # understand the full backend planner/compiler internals.
@@ -107,7 +148,7 @@ def _write_manifest(
     phase0_filename = pathlib.Path(phase0_artifact).name if phase0_artifact else "phase0.json"
 
     manifest_payload = {
-        "manifest_version": "0.1",
+        "manifest_version": "0.2",
         "generated_at_utc": _utc_now_iso(),
         "world_id": world_id,
         "portal_ready_at_phase": PORTAL_READY_PHASE,
@@ -121,21 +162,80 @@ def _write_manifest(
                 "teleportable_surfaces": compile_result.get("teleportable_surfaces", 0),
             }
         },
+        "budgets": worldspec.get("budgets", {}),
+        "placement_intent": _normalized_manifest_object(worldspec.get("placement_intent")),
+        "placement_plan": _normalized_manifest_object(worldspec.get("placement_plan")),
     }
     if isinstance(prompt_plan, dict):
-        manifest_payload["prompt_plan"] = {
-            "mode": prompt_plan.get("mode"),
-            "strategy": prompt_plan.get("strategy"),
-            "selected_prompt": prompt_plan.get("selected_prompt"),
-            "selected_variant_index": prompt_plan.get("selected_variant_index"),
-        }
+        manifest_payload["prompt_plan"] = _prompt_plan_manifest(prompt_plan)
     if isinstance(planner_backend, str) and planner_backend:
         manifest_payload["planner_backend"] = planner_backend
     if isinstance(candidate_asset_ids, list) and candidate_asset_ids:
         manifest_payload["candidate_asset_ids"] = candidate_asset_ids[:40]
+    if isinstance(semantic_path_status, str):
+        manifest_payload["semantic_path_status"] = semantic_path_status
+    if isinstance(fallback_used, bool):
+        manifest_payload["fallback_used"] = fallback_used
+    if fallback_reason is None or isinstance(fallback_reason, str):
+        manifest_payload["fallback_reason"] = fallback_reason
+    stylekit_payload = resolve_stylekit_runtime_payload(worldspec.get("stylekit_id"))
+    manifest_payload["stylekit"] = {
+        "stylekit_id": stylekit_payload.get("stylekit_id"),
+        "lighting": stylekit_payload.get("lighting"),
+        "palette": stylekit_payload.get("palette"),
+        "skybox": stylekit_payload.get("skybox"),
+    }
+    manifest_payload["runtime_polish"] = stylekit_payload.get("runtime_polish", {})
 
     manifest_path.write_text(json.dumps(manifest_payload, indent=2, sort_keys=True), encoding="utf-8")
     return manifest_path
+
+
+def _compile_error_response(
+    compile_result: Dict[str, Any],
+    request_id: str,
+    trace_id: str,
+    planner_extra: Dict[str, Any],
+) -> Dict[str, Any]:
+    compile_errors = compile_result.get("errors", [])
+    has_spawn_error = any(
+        isinstance(err, dict) and str(err.get("path", "")).startswith("$.safe_spawn")
+        for err in compile_errors
+    )
+    return _error(
+        "spawn_failed" if has_spawn_error else "compile_failed",
+        "World spawn preparation failed."
+        if has_spawn_error
+        else "World compilation failed before destination was playable.",
+        request_id,
+        trace_id,
+        compile_errors,
+        extra=planner_extra if planner_extra else None,
+    )
+
+
+def _status_code_for_error(error_code: Any) -> int:
+    if error_code == "invalid_request":
+        return 400
+    if error_code in {"planner_failed", "compile_failed", "spawn_failed"}:
+        return 422
+    return 500
+
+
+def _invalid_request_error(
+    request_id: str,
+    trace_id: str,
+    user_message: str,
+    path: str,
+    message: str,
+) -> Dict[str, Any]:
+    return _error(
+        "invalid_request",
+        user_message,
+        request_id,
+        trace_id,
+        [{"path": path, "message": message}],
+    )
 
 
 def run_plan_and_compile(
@@ -151,30 +251,30 @@ def run_plan_and_compile(
 
     prompt = (prompt_text or "").strip()
     if not prompt:
-        return _error(
-            "invalid_request",
-            "Prompt is empty.",
+        return _invalid_request_error(
             request_id,
             trace_id,
-            [{"path": "$.prompt_text", "message": "prompt_text must be a non-empty string"}],
+            "Prompt is empty.",
+            "$.prompt_text",
+            "prompt_text must be a non-empty string",
         )
 
     if optional_seed is not None and (isinstance(optional_seed, bool) or not isinstance(optional_seed, int)):
-        return _error(
-            "invalid_request",
-            "Seed must be an integer.",
+        return _invalid_request_error(
             request_id,
             trace_id,
-            [{"path": "$.optional_seed", "message": "optional_seed must be an integer"}],
+            "Seed must be an integer.",
+            "$.optional_seed",
+            "optional_seed must be an integer",
         )
 
     if optional_seed is not None and (optional_seed < 0 or optional_seed > 2_147_483_647):
-        return _error(
-            "invalid_request",
-            "Seed is outside supported range.",
+        return _invalid_request_error(
             request_id,
             trace_id,
-            [{"path": "$.optional_seed", "message": "optional_seed must be between 0 and 2147483647"}],
+            "Seed is outside supported range.",
+            "$.optional_seed",
+            "optional_seed must be between 0 and 2147483647",
         )
 
     normalized_prefs: Dict[str, Any] = user_prefs if isinstance(user_prefs, dict) else {}
@@ -191,24 +291,14 @@ def run_plan_and_compile(
             trace_id,
             [{"path": "$.planner", "message": "unhandled planner exception"}],
         )
-    prompt_plan = planner_result.get("prompt_plan") if isinstance(planner_result, dict) else None
-    planner_backend = planner_result.get("planner_backend") if isinstance(planner_result, dict) else None
-    candidate_asset_ids = (
-        planner_result.get("candidate_asset_ids") if isinstance(planner_result, dict) else None
-    )
-    semantic_receipts = (
-        planner_result.get("semantic_receipts") if isinstance(planner_result, dict) else None
-    )
-    planner_extra: Dict[str, Any] = {}
-    if isinstance(prompt_plan, dict):
-        planner_extra["prompt_plan"] = prompt_plan
-    if isinstance(planner_backend, str):
-        planner_extra["planner_backend"] = planner_backend
-    if isinstance(candidate_asset_ids, list):
-        planner_extra["candidate_asset_ids"] = candidate_asset_ids
-    if isinstance(semantic_receipts, dict):
-        planner_extra["semantic_receipts"] = semantic_receipts
-    planner_error_code = planner_result.get("error_code") if isinstance(planner_result, dict) else None
+    prompt_plan = planner_result.get("prompt_plan")
+    planner_backend = planner_result.get("planner_backend")
+    candidate_asset_ids = planner_result.get("candidate_asset_ids")
+    semantic_receipts = planner_result.get("semantic_receipts")
+    semantic_path_status = planner_result.get("semantic_path_status")
+    fallback_used = planner_result.get("fallback_used")
+    fallback_reason = planner_result.get("fallback_reason")
+    planner_extra, planner_error_code = _planner_context(planner_result)
     if not planner_result.get("ok"):
         user_message = "Could not build a valid world plan for this prompt."
         if isinstance(planner_error_code, str) and planner_error_code.startswith("llm_"):
@@ -249,19 +339,7 @@ def run_plan_and_compile(
             [{"path": "$.compile", "message": "unhandled compiler exception"}],
         )
     if not compile_result.get("ok"):
-        compile_errors = compile_result.get("errors", [])
-        has_spawn_error = any(
-            isinstance(err, dict) and str(err.get("path", "")).startswith("$.safe_spawn")
-            for err in compile_errors
-        )
-        return _error(
-            "spawn_failed" if has_spawn_error else "compile_failed",
-            "World spawn preparation failed." if has_spawn_error else "World compilation failed before destination was playable.",
-            request_id,
-            trace_id,
-            compile_errors,
-            extra=planner_extra if planner_extra else None,
-        )
+        return _compile_error_response(compile_result, request_id, trace_id, planner_extra)
 
     world_id = str(compile_result["world_id"])
     try:
@@ -273,6 +351,9 @@ def run_plan_and_compile(
             prompt_plan=prompt_plan if isinstance(prompt_plan, dict) else None,
             planner_backend=planner_backend if isinstance(planner_backend, str) else None,
             candidate_asset_ids=candidate_asset_ids if isinstance(candidate_asset_ids, list) else None,
+            semantic_path_status=semantic_path_status if isinstance(semantic_path_status, str) else None,
+            fallback_used=fallback_used if isinstance(fallback_used, bool) else None,
+            fallback_reason=fallback_reason if fallback_reason is None or isinstance(fallback_reason, str) else None,
         )
     except OSError as exc:
         return _error(
@@ -304,27 +385,23 @@ def run_plan_and_compile(
         "readiness": readiness,
         "errors": [],
     }
+    response.update(_planner_response_fields(planner_result))
     if isinstance(prompt_plan, dict):
-        response["prompt_plan"] = prompt_plan
         response["selected_prompt"] = prompt_plan.get("selected_prompt")
-    if isinstance(planner_backend, str):
-        response["planner_backend"] = planner_backend
-    if isinstance(candidate_asset_ids, list):
-        response["candidate_asset_ids"] = candidate_asset_ids
-    if isinstance(semantic_receipts, dict):
-        response["semantic_receipts"] = semantic_receipts
     return response
 
 
 try:
     from fastapi import FastAPI
     from fastapi.responses import JSONResponse
+    from fastapi.staticfiles import StaticFiles
     from pydantic import BaseModel, Field
 except ImportError:  # pragma: no cover - optional dependency for API serving
     FastAPI = None
     BaseModel = object
     Field = None
     JSONResponse = None
+    StaticFiles = None
     app = None
 
 
@@ -336,6 +413,16 @@ if FastAPI is not None:
 
 
     app = FastAPI(title="JuniorIS Planner/Compiler API", version=API_CONTRACT_VERSION)
+    BUILD_ROOT.mkdir(parents=True, exist_ok=True)
+    app.mount("/build", StaticFiles(directory=str(BUILD_ROOT), check_dir=True), name="build")
+
+    @app.get("/healthz")
+    def healthz():
+        return {
+            "ok": True,
+            "api_contract_version": API_CONTRACT_VERSION,
+            "build_root": str(BUILD_ROOT),
+        }
 
     @app.post("/plan_and_compile")
     def plan_and_compile(payload: PlanAndCompileRequest):
@@ -348,14 +435,7 @@ if FastAPI is not None:
         if result.get("ok"):
             return result
 
-        code = result.get("error_code")
-        status_code = (
-            400
-            if code == "invalid_request"
-            else 422
-            if code in {"planner_failed", "compile_failed", "spawn_failed"}
-            else 500
-        )
+        status_code = _status_code_for_error(result.get("error_code"))
         return JSONResponse(content=result, status_code=status_code)
 
 
@@ -365,7 +445,7 @@ def main() -> int:
 
     import uvicorn  # type: ignore
 
-    uvicorn.run("src.api_server:app", host="127.0.0.1", port=8000, reload=False)
+    uvicorn.run("src.api.server:app", host="127.0.0.1", port=8000, reload=False)
     return 0
 
 

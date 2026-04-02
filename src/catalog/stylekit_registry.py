@@ -8,9 +8,8 @@ from typing import Any, Dict, List
 from jsonschema import Draft7Validator
 
 
-DEFAULT_SCHEMA_PATH = (
-    pathlib.Path(__file__).resolve().parents[1] / "schemas" / "stylekit_manifest_v0.schema.json"
-)
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+DEFAULT_SCHEMA_PATH = PROJECT_ROOT / "schemas" / "stylekit_manifest_v0.schema.json"
 
 
 @dataclass

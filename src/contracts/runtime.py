@@ -6,10 +6,10 @@ from typing import Any, Dict
 
 from jsonschema import Draft7Validator
 
-from src.stylekit_registry import load_stylekit_registry
+from src.catalog.stylekit_registry import load_stylekit_registry
 
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 API_RESPONSE_SCHEMA_PATH = ROOT / 'schemas' / 'api_response_v0.2.schema.json'
 MANIFEST_SCHEMA_PATH = ROOT / 'schemas' / 'manifest_v0.2.schema.json'
 
@@ -72,6 +72,23 @@ def _normalized_contract_object(value: Any) -> Dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
+def _stylekit_payload(
+    *,
+    stylekit_id: str | None,
+    lighting: Any,
+    palette: Any,
+    skybox: Any,
+    runtime_polish: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    return {
+        'stylekit_id': stylekit_id,
+        'lighting': lighting,
+        'palette': palette,
+        'skybox': skybox,
+        'runtime_polish': runtime_polish or _normalize_runtime_polish(None),
+    }
+
+
 def resolve_stylekit_runtime_payload(stylekit_id: str | None) -> Dict[str, Any]:
     if not stylekit_id:
         return _empty_stylekit_payload()
@@ -83,13 +100,13 @@ def resolve_stylekit_runtime_payload(stylekit_id: str | None) -> Dict[str, Any]:
         payload['stylekit_id'] = stylekit_id
         return payload
 
-    return {
-        'stylekit_id': stylekit_id,
-        'lighting': stylekit.get('lighting'),
-        'palette': stylekit.get('palette'),
-        'skybox': stylekit.get('skybox'),
-        'runtime_polish': _normalize_runtime_polish(stylekit),
-    }
+    return _stylekit_payload(
+        stylekit_id=stylekit_id,
+        lighting=stylekit.get('lighting'),
+        palette=stylekit.get('palette'),
+        skybox=stylekit.get('skybox'),
+        runtime_polish=_normalize_runtime_polish(stylekit),
+    )
 
 
 def _base_manifest_payload(payload: Dict[str, Any], *, manifest_version: str) -> Dict[str, Any]:
@@ -122,12 +139,13 @@ def parse_manifest_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     if manifest_version == '0.1':
         resolved_stylekit = resolve_stylekit_runtime_payload(stylekit_block.get('stylekit_id')) if stylekit_block else _empty_stylekit_payload()
-        stylekit_payload = {
-            'stylekit_id': stylekit_block.get('stylekit_id') if stylekit_block else None,
-            'lighting': stylekit_block.get('lighting') if stylekit_block else resolved_stylekit.get('lighting'),
-            'palette': stylekit_block.get('palette') if stylekit_block else resolved_stylekit.get('palette'),
-            'skybox': stylekit_block.get('skybox') if stylekit_block else resolved_stylekit.get('skybox'),
-        }
+        stylekit_payload = _stylekit_payload(
+            stylekit_id=stylekit_block.get('stylekit_id') if stylekit_block else None,
+            lighting=stylekit_block.get('lighting') if stylekit_block else resolved_stylekit.get('lighting'),
+            palette=stylekit_block.get('palette') if stylekit_block else resolved_stylekit.get('palette'),
+            skybox=stylekit_block.get('skybox') if stylekit_block else resolved_stylekit.get('skybox'),
+            runtime_polish=None,
+        )
         return {
             **_base_manifest_payload(payload, manifest_version='0.2'),
             'stylekit': stylekit_payload,
