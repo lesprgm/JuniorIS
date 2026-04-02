@@ -58,6 +58,55 @@ def _format_error_path(path_parts: List[Any]) -> str:
     return out
 
 
+def _normalize_ambience(value: Any) -> Dict[str, Any] | None:
+    if isinstance(value, str) and value.strip():
+        return {"clip_id": value.strip(), "volume": 0.2}
+    if isinstance(value, dict):
+        clip_id = str(value.get("clip_id") or "").strip()
+        if not clip_id:
+            return None
+        volume = value.get("volume", 0.2)
+        if not isinstance(volume, (int, float)):
+            volume = 0.2
+        return {"clip_id": clip_id, "volume": max(0.0, min(float(volume), 1.0))}
+    return None
+
+
+def _normalize_decals(value: Any) -> List[Dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    decals: List[Dict[str, Any]] = []
+    for entry in value:
+        if not isinstance(entry, dict):
+            continue
+        decal_id = str(entry.get("decal_id") or "").strip()
+        max_count = entry.get("max_count")
+        if not decal_id or not isinstance(max_count, int) or max_count < 0:
+            continue
+        decals.append({"decal_id": decal_id, "max_count": max_count})
+    return decals
+
+
+def _normalize_postfx(value: Any) -> Dict[str, Any] | None:
+    if isinstance(value, str) and value.strip():
+        return {"profile_id": value.strip()}
+    if isinstance(value, dict):
+        profile_id = str(value.get("profile_id") or "").strip()
+        if profile_id:
+            return {"profile_id": profile_id}
+    return None
+
+
+def _normalize_stylekit_manifest(manifest: Dict[str, Any]) -> Dict[str, Any]:
+    stylekit = dict(manifest)
+    stylekit["ambience"] = _normalize_ambience(manifest.get("ambience"))
+    stylekit["decals"] = _normalize_decals(manifest.get("decals"))
+    stylekit["postfx"] = _normalize_postfx(manifest.get("postfx"))
+    perf_overrides = manifest.get("perf_overrides")
+    stylekit["perf_overrides"] = dict(perf_overrides) if isinstance(perf_overrides, dict) else {}
+    return stylekit
+
+
 def load_stylekit_registry(
     stylekits_root: str | pathlib.Path = "stylekits",
     schema_path: str | pathlib.Path = DEFAULT_SCHEMA_PATH,
@@ -106,7 +155,7 @@ def load_stylekit_registry(
             )
             continue
 
-        stylekit_copy = dict(manifest)
+        stylekit_copy = _normalize_stylekit_manifest(manifest)
         stylekit_copy["_manifest_path"] = str(manifest_path)
         registry.stylekits_by_id[stylekit_id] = stylekit_copy
         registry.tags_index[stylekit_id] = list(manifest.get("tags", []))
