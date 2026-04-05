@@ -118,17 +118,21 @@ def _base_manifest_payload(payload: Dict[str, Any], *, manifest_version: str) ->
         'worldspec_version': payload.get('worldspec_version'),
         'template_id': payload.get('template_id'),
         'safe_spawn': payload.get('safe_spawn'),
+        'readiness': payload.get('readiness') or {},
+        'phase0_url': payload.get('phase0_url'),
+        'phase0_data': payload.get('phase0_data'),
         'phase_order': payload.get('phase_order') or ['phase0'],
         'phases': payload.get('phases') or {},
         'planner_backend': payload.get('planner_backend'),
         'semantic_path_status': payload.get('semantic_path_status'),
-        'fallback_used': payload.get('fallback_used'),
-        'fallback_reason': payload.get('fallback_reason'),
         'candidate_asset_ids': payload.get('candidate_asset_ids') or [],
         'prompt_plan': payload.get('prompt_plan') or {},
         'budgets': payload.get('budgets') or {},
+        'colors': _normalized_contract_object(payload.get('colors')),
         'placement_intent': _normalized_contract_object(payload.get('placement_intent')),
         'placement_plan': _normalized_contract_object(payload.get('placement_plan')),
+        'scene_context': _normalized_contract_object(payload.get('scene_context')),
+        'decor_plan': _normalized_contract_object(payload.get('decor_plan')),
     }
 
 

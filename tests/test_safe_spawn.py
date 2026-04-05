@@ -1,8 +1,8 @@
 import json
 import pathlib
 
-from src.compiler_phase0 import compile_phase0
-from src.safe_spawn import find_safe_spawn
+from src.compilation.phase0 import compile_phase0
+from src.runtime.safe_spawn import find_safe_spawn
 
 
 FIXTURES_DIR = pathlib.Path(__file__).resolve().parent / "fixtures"

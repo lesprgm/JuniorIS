@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Tuple
 
 from src.catalog.pack_registry import load_pack_registry
 from src.planning.assets import collect_assets
-from src.placement.policy import geometry_profile_from_asset
+from src.placement.geometry import geometry_profile_from_asset, semantic_role_key
 from src.placement.solver import solve_placement_layout
 from src.runtime.safe_spawn import find_safe_spawn
 from src.catalog.stylekit_registry import load_stylekit_registry
@@ -106,6 +106,7 @@ def _compiled_input(
         "placement_id": f"placement_{index:03d}",
         "asset_id": resolved_asset_id,
         "requested_asset_id": requested_asset_id,
+        "role": str(placement.get("role") or geometry_profile.get("placement_role") or semantic_role_key(asset_record)),
         "resolution_type": resolution_type,
         "substitution_reason": reason,
         "mode": "placeholder" if resolution_type == "placeholder" else "asset",
@@ -153,6 +154,9 @@ def _compile_placements(
         requested_tags = placement.get("tags")
         requested_meta = {
             "tags": requested_tags if isinstance(requested_tags, list) else [],
+            "allow_passthrough_exact": True,
+            "role": placement.get("role"),
+            "label": placement.get("label"),
             "category": placement.get("category"),
             "style_tags": placement.get("style_tags"),
             "era_tags": placement.get("era_tags"),

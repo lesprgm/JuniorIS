@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 from src.compilation.phase0 import compile_phase0
 from src.planning.planner import plan_worldspec
 from src.contracts.runtime import resolve_stylekit_runtime_payload
+from src.runtime.decor_plan import build_runtime_decor_plan, build_runtime_scene_context
 
 BUILD_ROOT = pathlib.Path("build")
 PORTAL_READY_PHASE = "phase0"
@@ -79,15 +80,16 @@ def _planner_response_fields(planner_result: Dict[str, Any]) -> Dict[str, Any]:
         ("candidate_asset_ids", list),
         ("semantic_receipts", dict),
         ("semantic_path_status", str),
-        ("fallback_used", bool),
+        ("intent_spec", dict),
+        ("placement_intent", dict),
+        ("missing_required_roles", list),
+        ("covered_required_roles", list),
+        ("selected_asset_ids", list),
     ):
         value = planner_result.get(key)
         if isinstance(value, expected_type):
             fields[key] = value
 
-    fallback_reason = planner_result.get("fallback_reason")
-    if fallback_reason is None or isinstance(fallback_reason, str):
-        fields["fallback_reason"] = fallback_reason
     return fields
 
 
@@ -126,6 +128,15 @@ def _build_readiness(compile_result: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _phase0_manifest_payload(
+    world_id: str,
+    compile_result: Dict[str, Any],
+) -> tuple[str, Dict[str, Any] | None]:
+    phase0_artifact = compile_result.get("phase0_artifact")
+    phase0_filename = pathlib.Path(phase0_artifact).name if phase0_artifact else "phase0.json"
+    return f"/build/{world_id}/{phase0_filename}", compile_result.get("phase0_data")
+
+
 def _write_manifest(
     build_root: pathlib.Path,
     world_id: str,
@@ -135,8 +146,7 @@ def _write_manifest(
     planner_backend: Optional[str] = None,
     candidate_asset_ids: Optional[list[str]] = None,
     semantic_path_status: Optional[str] = None,
-    fallback_used: Optional[bool] = None,
-    fallback_reason: Optional[str] = None,
+    intent_spec: Optional[Dict[str, Any]] = None,
 ) -> pathlib.Path:
     # Keep the manifest narrow and runtime-focused so Unity does not need to
     # understand the full backend planner/compiler internals.
@@ -146,7 +156,14 @@ def _write_manifest(
 
     phase0_artifact = compile_result.get("phase0_artifact")
     phase0_filename = pathlib.Path(phase0_artifact).name if phase0_artifact else "phase0.json"
+    phase0_url, phase0_data = _phase0_manifest_payload(world_id, compile_result)
+    readiness = _build_readiness(compile_result)
 
+    scene_context = build_runtime_scene_context(
+        intent_spec=intent_spec,
+        placement_intent=worldspec.get("placement_intent"),
+        selected_assets=worldspec.get("placements") or [],
+    )
     manifest_payload = {
         "manifest_version": "0.2",
         "generated_at_utc": _utc_now_iso(),
@@ -155,6 +172,9 @@ def _write_manifest(
         "worldspec_version": worldspec.get("worldspec_version"),
         "template_id": worldspec.get("template_id"),
         "safe_spawn": compile_result.get("safe_spawn"),
+        "readiness": readiness,
+        "phase0_url": phase0_url,
+        "phase0_data": phase0_data,
         "phase_order": ["phase0"],
         "phases": {
             "phase0": {
@@ -163,8 +183,16 @@ def _write_manifest(
             }
         },
         "budgets": worldspec.get("budgets", {}),
+        "colors": _normalized_manifest_object(worldspec.get("colors")),
         "placement_intent": _normalized_manifest_object(worldspec.get("placement_intent")),
         "placement_plan": _normalized_manifest_object(worldspec.get("placement_plan")),
+        "scene_context": scene_context,
+        "decor_plan": build_runtime_decor_plan(
+            intent_spec=intent_spec,
+            placement_intent=worldspec.get("placement_intent"),
+            selected_assets=worldspec.get("placements") or [],
+            scene_context=scene_context,
+        ),
     }
     if isinstance(prompt_plan, dict):
         manifest_payload["prompt_plan"] = _prompt_plan_manifest(prompt_plan)
@@ -174,10 +202,6 @@ def _write_manifest(
         manifest_payload["candidate_asset_ids"] = candidate_asset_ids[:40]
     if isinstance(semantic_path_status, str):
         manifest_payload["semantic_path_status"] = semantic_path_status
-    if isinstance(fallback_used, bool):
-        manifest_payload["fallback_used"] = fallback_used
-    if fallback_reason is None or isinstance(fallback_reason, str):
-        manifest_payload["fallback_reason"] = fallback_reason
     stylekit_payload = resolve_stylekit_runtime_payload(worldspec.get("stylekit_id"))
     manifest_payload["stylekit"] = {
         "stylekit_id": stylekit_payload.get("stylekit_id"),
@@ -296,8 +320,6 @@ def run_plan_and_compile(
     candidate_asset_ids = planner_result.get("candidate_asset_ids")
     semantic_receipts = planner_result.get("semantic_receipts")
     semantic_path_status = planner_result.get("semantic_path_status")
-    fallback_used = planner_result.get("fallback_used")
-    fallback_reason = planner_result.get("fallback_reason")
     planner_extra, planner_error_code = _planner_context(planner_result)
     if not planner_result.get("ok"):
         user_message = "Could not build a valid world plan for this prompt."
@@ -352,8 +374,7 @@ def run_plan_and_compile(
             planner_backend=planner_backend if isinstance(planner_backend, str) else None,
             candidate_asset_ids=candidate_asset_ids if isinstance(candidate_asset_ids, list) else None,
             semantic_path_status=semantic_path_status if isinstance(semantic_path_status, str) else None,
-            fallback_used=fallback_used if isinstance(fallback_used, bool) else None,
-            fallback_reason=fallback_reason if fallback_reason is None or isinstance(fallback_reason, str) else None,
+            intent_spec=planner_result.get("intent_spec") if isinstance(planner_result.get("intent_spec"), dict) else None,
         )
     except OSError as exc:
         return _error(
