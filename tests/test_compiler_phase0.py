@@ -1,7 +1,7 @@
 import json
 import pathlib
 
-from src.compiler_phase0 import compile_phase0
+from src.compilation.phase0 import compile_phase0
 
 
 FIXTURES_DIR = pathlib.Path(__file__).resolve().parent / "fixtures"
@@ -100,7 +100,7 @@ def test_compile_phase0_returns_safe_spawn_failure_when_room_is_fully_blocked():
     assert any(error["path"] == "$.safe_spawn" for error in result["errors"])
 
 
-def test_compile_phase0_substitutes_missing_asset_and_reports_it(tmp_path):
+def test_compile_phase0_substitutes_missing_asset_and_reports_it(monkeypatch, tmp_path):
     worldspec = _load("worldspec_phase0_valid.json")
     worldspec["placements"] = [
         {
@@ -114,7 +114,24 @@ def test_compile_phase0_substitutes_missing_asset_and_reports_it(tmp_path):
         }
     ]
     worldspec["pack_ids"] = ["core_pack"]
-    worldspec["planner_policy"] = {"allow_heuristic_fallback": True}
+    monkeypatch.setattr(
+        "src.compilation.phase0.resolve_asset_or_substitute",
+        lambda **kwargs: {
+            "resolved_asset_id": "core_chair_01",
+            "resolution_type": "substitute",
+            "reason": "semantic_rerank_match",
+            "coherence_checks": {
+                "visual_style_match": True,
+                "poly_style_match": True,
+                "theme_overlap_match": True,
+            },
+            "rejected_candidate_counts": {},
+            "alternatives": ["core_chair_01"],
+            "rationale": ["chair is the closest semantic match"],
+            "selection_backend": "semantic",
+            "semantic_failure_reason": None,
+        },
+    )
 
     result = compile_phase0(worldspec, build_root=tmp_path)
     assert result["ok"] is True
@@ -186,7 +203,7 @@ def test_compile_phase0_passes_stylekit_theme_into_substitution(monkeypatch, tmp
             "semantic_failure_reason": None,
         }
 
-    monkeypatch.setattr("src.compiler_phase0.resolve_asset_or_substitute", _fake_resolve)
+    monkeypatch.setattr("src.compilation.phase0.resolve_asset_or_substitute", _fake_resolve)
 
     result = compile_phase0(worldspec, build_root=tmp_path)
     assert result["ok"] is True

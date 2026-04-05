@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from src.api_server import run_plan_and_compile
+from src.api.server import run_plan_and_compile
 
 
 def _live_llm_tests_enabled() -> bool:

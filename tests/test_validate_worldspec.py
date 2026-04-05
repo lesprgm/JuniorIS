@@ -1,7 +1,7 @@
 import json
 import pathlib
 
-from src.validate_worldspec import validate_worldspec
+from src.world.validation import validate_worldspec
 
 
 FIXTURES_DIR = pathlib.Path(__file__).resolve().parent / "fixtures"

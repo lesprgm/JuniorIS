@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from src.api_server import run_plan_and_compile
-from src.runtime_contracts import validate_api_response_contract
+from src.api.server import run_plan_and_compile
+from src.contracts.runtime import validate_api_response_contract
 from tests.semantic_test_utils import inline_semantic_prefs
 
 

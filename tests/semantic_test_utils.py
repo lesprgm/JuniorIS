@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from src.pack_registry import load_pack_registry
-from src.planner_assets import build_semantic_candidate_shortlist, collect_assets
+from src.catalog.pack_registry import load_pack_registry
+from src.planning.assets import build_semantic_candidate_shortlist, collect_assets
 
 
 def shortlist_asset_ids(prompt_text: str, *roles: str) -> list[str]:

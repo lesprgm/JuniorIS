@@ -1,6 +1,6 @@
 import pathlib
 
-from src.pack_registry import load_pack_registry
+from src.catalog.pack_registry import load_pack_registry
 
 
 FIXTURES_DIR = pathlib.Path(__file__).resolve().parent / "fixtures"
@@ -35,3 +35,28 @@ def test_duplicate_asset_ids_are_skipped():
     assert "shared_asset_01" in registry.assets_by_id
     assert registry.assets_by_id["shared_asset_01"]["pack_id"] in {"pack_a", "pack_b"}
     assert any("duplicate asset_id" in e["message"] for e in registry.errors)
+
+
+def test_invalid_pack_manifest_reports_readable_error_path(tmp_path):
+    pack_dir = tmp_path / "broken_pack"
+    pack_dir.mkdir(parents=True)
+    (pack_dir / "pack.json").write_text(
+        """
+        {
+          "pack_id": "broken_pack",
+          "version": "0.1.0",
+          "tags": ["indoor"],
+          "assets": [
+            {
+              "label": "Missing asset id"
+            }
+          ]
+        }
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    registry = load_pack_registry(tmp_path)
+    assert registry.packs_by_id == {}
+    assert registry.errors
+    assert registry.errors[0]["path"].endswith("$.assets[0]")

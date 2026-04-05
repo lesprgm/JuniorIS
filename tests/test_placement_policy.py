@@ -1,10 +1,6 @@
-from src.placement_policy import (
-    default_constraint_for_role,
-    derive_near_distance,
-    geometry_profile_from_asset,
-    room_capacity_summary,
-)
-from src.world_templates import ROOM_BASIC_DIMENSIONS
+from src.placement.constraints import default_constraint_for_role
+from src.placement.geometry import derive_near_distance, geometry_profile_from_asset, room_capacity_summary
+from src.world.templates import ROOM_BASIC_DIMENSIONS
 
 
 def _asset(asset_id: str, role: str, size_x: float | None = None, size_z: float | None = None):
