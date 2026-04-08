@@ -102,6 +102,27 @@ This gate is part of what makes the architecture feel more like a compiler than 
 
 This check matters for both comfort and credibility. From a comfort standpoint, the user should never emerge from the portal inside a chair, too close to a wall, or facing a cluttered corner with no space to move. From a systems standpoint, safe spawn is the final proof that the room is not only a semantic answer to the prompt but also a usable destination. In that sense, spawn selection functions as a practical end condition for the compiler: if a safe spawn cannot be found, the room is not ready.
 
+\subsubsection{Runtime Realization and Decor}
+The runtime does not simply instantiate a list of arbitrary prefabs. It consumes a contract that includes exact asset IDs where possible, role-based fallback behavior where necessary, and scene context that helps the Unity side present the room more coherently. The backend also emits a decor plan and room archetype so that rooms can receive supporting props and simple wall treatment without the headset inventing its own interpretation.
+
+This runtime contract became richer as the backend design settled. Earlier versions sent placements with less context, which left more room for Unity-side guesswork. That led to inconsistent realizations and made debugging harder because some room logic existed only on the headset. Once more of that intent moved into the manifest, including roles, archetype, decor guidance, and exact realization information, the backend became the clear source of truth. Unity could then focus on realizing the checked room instead of deciding what the room should mean.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.84\linewidth]{imgs/Review_to_Runtime.png}
+    \caption{Review-to-runtime pipeline. Approved assets and their semantic corrections are turned into a runtime registry and manifest so Unity realizes the checked room instead of inferring room logic locally.}
+    \label{fig:review-to-runtime}
+\end{figure}
+
+Figure~\ref{fig:methodology-placeholder} gives a simple view of how the client, backend, and runtime parts of the system connect.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.92\linewidth]{imgs/Simplified_Architecture.png}
+    \caption{Simplified system architecture for the prompt-to-world pipeline, showing the client, backend compiler pipeline, and runtime handoff.}
+    \label{fig:methodology-placeholder}
+\end{figure}
+
 \subsection{Research Questions and Goals}
 My research question is whether a prompt-driven system can convert natural language into a walkable VR world quickly enough to remain interactive while still enforcing safety, validity, and runtime constraints. The main goals are to generate a validated WorldSpec from a prompt, compile it into a room the user can safely enter, and measure whether this pipeline remains reliable on standalone VR hardware.
 
