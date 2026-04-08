@@ -81,8 +81,26 @@ The most important design choices are to use an LLM for semantic planning and di
 
 Early tests made it clear why spatial awareness mattered. Even when the selected assets were broadly correct, the room could still look wrong if objects were dropped into open space without much regard for one another. Desks, chairs, and other props read less like a furnished room and more like a pile of disconnected objects. That problem pushed the project toward relation-aware placement, stronger scene context, and stricter compile-time checks.
 
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.84\linewidth]{imgs/Without_Spatial_Placement.png}
+    \caption{Room output before spatial placement was treated seriously. The selected assets are present, but the layout reads more like objects dumped into a shell than a coherent room.}
+    \label{fig:without-spatial-placement}
+\end{figure}
 
 The implementation work therefore moved in two directions at once. The planner became more structured and less ad hoc, while the compiler became stricter and more explicit about what counted as a valid room. Those changes needed each other. A stronger planner without a careful compiler would still allow unsafe or awkward layouts. A strict compiler without a meaningful planner would reject too many interesting prompts. The system only became usable once both sides improved together.
+
+\subsubsection{How Spatial Placement Was Implemented}
+Spatial placement is handled as direct coordinate prediction from the language model after semantic planning and asset selection are complete. The backend first builds a room shell and converts each selected object into a simplified geometry profile. The language model then places those approved objects numerically inside the room, using the scene program as context rather than working from the raw prompt alone. This still follows the broad pattern emphasized by LayoutGPT and Holodeck, where semantic structure is made explicit before final world construction~\cite{Feng_2023_NeurIPS_LayoutGPT, Yang_2024_CVPR}. There is no secondary placement solver that rearranges the room afterward. The model decides the arrangement, and the compiler either accepts that proposal or rejects it.
+
+The richer scene program gives that placement stage more direction than a flat role list did. It specifies an anchor object, support hierarchy, relation graph, density target, and walkway-preservation hints, so the placement request is much closer to room composition than to a simple list of nouns. GraphDreamer and CommonScenes both argue that explicit relational structure improves scene coherence~\cite{Gao_2024_CVPR_GraphDreamer, Zhai_2023_NeurIPS_CommonScenes}, and that same idea is used here to give the model more meaningful spatial work. The compiler still checks the result afterward for safety and runtime suitability, but the arrangement itself comes from the model.
+
+\subsubsection{Safe Spawn and Portal Readiness}
+One of the simplest but most important implementation details is the safe-spawn search. After the room shell and placements are compiled, the backend searches for a valid player spawn by testing candidate points on the walkable floor while avoiding occupied space. The portal is not allowed to open unless this step succeeds. That means a room can be semantically valid and still be rejected if it does not contain a safe place to enter.
+
+This gate is part of what makes the architecture feel more like a compiler than a demo script. The system does not assume that a plausible room is good enough. It proves that the player can enter it safely, that the floor is valid for teleport locomotion, and that the backend can produce a complete runtime contract before the Unity client commits to the transition.
+
+This check matters for both comfort and credibility. From a comfort standpoint, the user should never emerge from the portal inside a chair, too close to a wall, or facing a cluttered corner with no space to move. From a systems standpoint, safe spawn is the final proof that the room is not only a semantic answer to the prompt but also a usable destination. In that sense, spawn selection functions as a practical end condition for the compiler: if a safe spawn cannot be found, the room is not ready.
 
 \subsection{Research Questions and Goals}
 My research question is whether a prompt-driven system can convert natural language into a walkable VR world quickly enough to remain interactive while still enforcing safety, validity, and runtime constraints. The main goals are to generate a validated WorldSpec from a prompt, compile it into a room the user can safely enter, and measure whether this pipeline remains reliable on standalone VR hardware.
