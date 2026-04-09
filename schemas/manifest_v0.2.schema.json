@@ -1,0 +1,228 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JuniorIS manifest v0.2",
+  "type": "object",
+  "required": [
+    "manifest_version",
+    "generated_at_utc",
+    "world_id",
+    "portal_ready_at_phase",
+    "safe_spawn",
+    "phase_order",
+    "phases",
+    "stylekit",
+    "runtime_polish"
+  ],
+  "properties": {
+    "manifest_version": {
+      "const": "0.2"
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "minLength": 1
+    },
+    "world_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "portal_ready_at_phase": {
+      "type": "string",
+      "minLength": 1
+    },
+    "worldspec_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "template_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "readiness": {
+      "type": "object",
+      "properties": {
+        "phase0_ready": {
+          "type": "boolean"
+        },
+        "safe_spawn_ready": {
+          "type": "boolean"
+        },
+        "portal_allowed": {
+          "type": "boolean"
+        },
+        "blocked_reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "phase0_url": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "phase0_data": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "safe_spawn": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "pos": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "rot": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "pos",
+        "rot"
+      ],
+      "additionalProperties": true
+    },
+    "phase_order": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "phases": {
+      "type": "object"
+    },
+    "planner_backend": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "candidate_asset_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "prompt_plan": {
+      "type": "object"
+    },
+    "budgets": {
+      "type": "object"
+    },
+    "colors": {
+      "type": "object"
+    },
+    "placement_intent": {
+      "type": "object"
+    },
+    "placement_plan": {
+      "type": "object"
+    },
+    "decor_plan": {
+      "type": "object"
+    },
+    "stylekit": {
+      "type": "object",
+      "required": [
+        "stylekit_id",
+        "lighting",
+        "palette",
+        "skybox"
+      ],
+      "properties": {
+        "stylekit_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lighting": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "palette": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "skybox": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "runtime_polish": {
+      "type": "object",
+      "required": [
+        "ambience",
+        "decals",
+        "postfx",
+        "perf_overrides"
+      ],
+      "properties": {
+        "ambience": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "decals": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "postfx": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "perf_overrides": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "semantic_path_status": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "ok",
+        "failed",
+        "fallback_used",
+        null
+      ]
+    }
+  },
+  "additionalProperties": true
+}

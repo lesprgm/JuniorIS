@@ -42,7 +42,45 @@
       "additionalProperties": true
     },
     "skybox": { "type": "string" },
-    "ambience": { "type": "string" },
+    "ambience": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "required": ["clip_id"],
+          "properties": {
+            "clip_id": { "type": "string", "minLength": 1 },
+            "volume": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "decals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["decal_id", "max_count"],
+        "properties": {
+          "decal_id": { "type": "string", "minLength": 1 },
+          "max_count": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": true
+      }
+    },
+    "postfx": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "required": ["profile_id"],
+          "properties": {
+            "profile_id": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
     "perf_overrides": { "type": "object" }
   },
   "additionalProperties": true

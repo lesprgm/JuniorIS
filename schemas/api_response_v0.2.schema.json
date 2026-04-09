@@ -1,0 +1,192 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JuniorIS API response v0.2",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "api_contract_version",
+        "ok",
+        "request_id",
+        "trace_id",
+        "world_id",
+        "manifest_url",
+        "portal_ready_at_phase",
+        "readiness",
+        "errors"
+      ],
+      "properties": {
+        "api_contract_version": {
+          "const": "0.2"
+        },
+        "ok": {
+          "const": true
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trace_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "world_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "manifest_url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "manifest_path": {
+          "type": "string"
+        },
+        "portal_ready_at_phase": {
+          "type": "string",
+          "minLength": 1
+        },
+        "planner_backend": {
+          "type": "string"
+        },
+        "candidate_asset_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "selected_prompt": {
+          "type": "string"
+        },
+        "semantic_receipts": {
+          "type": "object"
+        },
+        "prompt_plan": {
+          "type": "object"
+        },
+        "readiness": {
+          "type": "object",
+          "required": [
+            "phase0_ready",
+            "safe_spawn_ready",
+            "portal_allowed",
+            "blocked_reasons"
+          ],
+          "properties": {
+            "phase0_ready": {
+              "type": "boolean"
+            },
+            "safe_spawn_ready": {
+              "type": "boolean"
+            },
+            "portal_allowed": {
+              "type": "boolean"
+            },
+            "blocked_reasons": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": true
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "semantic_path_status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "ok",
+            "failed",
+            "fallback_used",
+            null
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "required": [
+        "api_contract_version",
+        "ok",
+        "request_id",
+        "trace_id",
+        "error_code",
+        "user_message",
+        "recoverable",
+        "retryable",
+        "retry_after_ms",
+        "details",
+        "errors"
+      ],
+      "properties": {
+        "api_contract_version": {
+          "const": "0.2"
+        },
+        "ok": {
+          "const": false
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trace_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "error_code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "user_message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recoverable": {
+          "type": "boolean"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "retry_after_ms": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "semantic_path_status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "ok",
+            "failed",
+            "fallback_used",
+            null
+          ]
+        }
+      },
+      "additionalProperties": true
+    }
+  ]
+}

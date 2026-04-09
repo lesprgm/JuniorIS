@@ -31,7 +31,19 @@
         "required": [ "asset_id", "transform" ],
         "properties": {
           "asset_id": { "type": "string" },
-          "transform": { "type": "object" }
+          "transform": { "type": "object" },
+          "constraint": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["floor", "against_wall", "near", "wall", "surface", "ceiling"]
+              },
+              "target": { "type": "string" },
+              "distance": { "type": "number", "minimum": 0.5, "maximum": 2.5 }
+            },
+            "additionalProperties": true
+          }
         },
         "additionalProperties": true
       }
@@ -40,10 +52,23 @@
       "type": "object",
       "properties": {
         "max_props": { "type": "integer" },
+        "max_props_hard": { "type": "integer" },
+        "max_floor_objects": { "type": "integer" },
+        "max_wall_objects": { "type": "integer" },
+        "max_surface_objects": { "type": "integer" },
         "max_texture_tier": { "type": "integer" },
-        "max_lights": { "type": "integer" }
+        "max_lights": { "type": "integer" },
+        "max_clutter_weight": { "type": "integer" }
       },
       "additionalProperties": true
+    },
+    "layout_program": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "optional_additions": {
+      "type": "array",
+      "items": { "type": "object" }
     },
     "colors": {
       "type": "object",

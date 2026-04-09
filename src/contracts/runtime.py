@@ -9,14 +9,15 @@ from jsonschema import Draft7Validator
 from src.catalog.stylekit_registry import load_stylekit_registry
 
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
-API_RESPONSE_SCHEMA_PATH = ROOT / 'schemas' / 'api_response_v0.2.schema.json'
-MANIFEST_SCHEMA_PATH = ROOT / 'schemas' / 'manifest_v0.2.schema.json'
+ROOT = pathlib.Path(__file__).resolve().parents[2]  # climb from src/contracts/ to project root
+API_RESPONSE_SCHEMA_PATH = ROOT / 'schemas' / 'api_response_v0.2.schema.json'  # schema the API response must satisfy
+MANIFEST_SCHEMA_PATH = ROOT / 'schemas' / 'manifest_v0.2.schema.json'  # schema the Unity manifest must satisfy
 
-_SCHEMA_CACHE: Dict[str, Dict[str, Any]] = {}
+_SCHEMA_CACHE: Dict[str, Dict[str, Any]] = {}  # keyed by path string to avoid re-reading schemas
 
 
-def _load_schema(path: pathlib.Path) -> Dict[str, Any]:
+# Keep behavior deterministic so planner/runtime contracts stay stable.
+def _load_schema(path: pathlib.Path) -> Dict[str, Any]:  # lazy-loads and caches the JSON schema at the given path
     key = str(path)
     cached = _SCHEMA_CACHE.get(key)
     if cached is None:
@@ -25,7 +26,7 @@ def _load_schema(path: pathlib.Path) -> Dict[str, Any]:
     return cached
 
 
-def validate_schema(payload: Dict[str, Any], schema_path: pathlib.Path) -> Dict[str, Any]:
+def validate_schema(payload: Dict[str, Any], schema_path: pathlib.Path) -> Dict[str, Any]:  # validates a payload against an arbitrary JSON schema
     validator = Draft7Validator(_load_schema(schema_path))
     errors = []
     for err in sorted(validator.iter_errors(payload), key=lambda item: list(item.path)):
@@ -36,20 +37,22 @@ def validate_schema(payload: Dict[str, Any], schema_path: pathlib.Path) -> Dict[
     return {'ok': not errors, 'errors': errors}
 
 
-def validate_api_response_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
+def validate_api_response_contract(payload: Dict[str, Any]) -> Dict[str, Any]:  # validates the full API response envelope
     return validate_schema(payload, API_RESPONSE_SCHEMA_PATH)
 
 
-def validate_manifest_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
+def validate_manifest_contract(payload: Dict[str, Any]) -> Dict[str, Any]:  # validates the Unity manifest payload
     return validate_schema(payload, MANIFEST_SCHEMA_PATH)
 
 
-def _normalize_runtime_polish(stylekit: Dict[str, Any] | None) -> Dict[str, Any]:
+def _normalize_runtime_polish(stylekit: Dict[str, Any] | None) -> Dict[str, Any]:  # extracts ambience, postfx, and perf overrides; forces decals off
     stylekit = stylekit or {}
     ambience = stylekit.get('ambience') if isinstance(stylekit.get('ambience'), dict) else None
-    decals = stylekit.get('decals') if isinstance(stylekit.get('decals'), list) else []
+    decals = []
     postfx = stylekit.get('postfx') if isinstance(stylekit.get('postfx'), dict) else None
     perf_overrides = stylekit.get('perf_overrides') if isinstance(stylekit.get('perf_overrides'), dict) else {}
+    perf_overrides = dict(perf_overrides)
+    perf_overrides['allow_decals'] = False  # decals are globally disabled for Quest perf reasons
     return {
         'ambience': ambience,
         'decals': decals,
@@ -89,7 +92,7 @@ def _stylekit_payload(
     }
 
 
-def resolve_stylekit_runtime_payload(stylekit_id: str | None) -> Dict[str, Any]:
+def resolve_stylekit_runtime_payload(stylekit_id: str | None) -> Dict[str, Any]:  # resolves a stylekit_id into the full runtime payload Unity needs
     if not stylekit_id:
         return _empty_stylekit_payload()
 
@@ -128,7 +131,10 @@ def _base_manifest_payload(payload: Dict[str, Any], *, manifest_version: str) ->
         'candidate_asset_ids': payload.get('candidate_asset_ids') or [],
         'prompt_plan': payload.get('prompt_plan') or {},
         'budgets': payload.get('budgets') or {},
+        'optional_additions': payload.get('optional_additions') or [],
         'colors': _normalized_contract_object(payload.get('colors')),
+        'surface_material_selection': _normalized_contract_object(payload.get('surface_material_selection')),
+        'shell_material_bindings': _normalized_contract_object(payload.get('shell_material_bindings')),
         'placement_intent': _normalized_contract_object(payload.get('placement_intent')),
         'placement_plan': _normalized_contract_object(payload.get('placement_plan')),
         'scene_context': _normalized_contract_object(payload.get('scene_context')),
@@ -136,7 +142,7 @@ def _base_manifest_payload(payload: Dict[str, Any], *, manifest_version: str) ->
     }
 
 
-def parse_manifest_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+def parse_manifest_payload(payload: Dict[str, Any]) -> Dict[str, Any]:  # normalizes v0.1/v0.2 manifests into a consistent v0.2 shape
     manifest_version = str(payload.get('manifest_version') or '0.1')
     stylekit_block = payload.get('stylekit') if isinstance(payload.get('stylekit'), dict) else {}
     runtime_polish = payload.get('runtime_polish') if isinstance(payload.get('runtime_polish'), dict) else None
