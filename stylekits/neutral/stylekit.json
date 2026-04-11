@@ -12,5 +12,16 @@
     "accent": "#4a90e2"
   },
   "skybox": "clear_day",
-  "ambience": "quiet_room"
+  "ambience": {
+    "clip_id": "quiet_room",
+    "volume": 0.18
+  },
+  "decals": [],
+  "postfx": {
+    "profile_id": "neutral_warm_lowcost"
+  },
+  "perf_overrides": {
+    "allow_decals": false,
+    "allow_postfx": true
+  }
 }

@@ -12,5 +12,19 @@
     "accent": "#ff6b6b"
   },
   "skybox": "city_night",
-  "ambience": "low_hum"
+  "ambience": {
+    "clip_id": "low_hum",
+    "volume": 0.26
+  },
+  "decals": [
+    { "decal_id": "edge_wear", "max_count": 4 },
+    { "decal_id": "grime_strip", "max_count": 2 }
+  ],
+  "postfx": {
+    "profile_id": "moody_evening_lowcost"
+  },
+  "perf_overrides": {
+    "allow_decals": true,
+    "allow_postfx": true
+  }
 }

@@ -6,6 +6,7 @@ from src.catalog.pack_registry import load_pack_registry
 FIXTURES_DIR = pathlib.Path(__file__).resolve().parent / "fixtures"
 
 
+# Keep behavior deterministic so planner/runtime contracts stay stable.
 def test_pack_registry_loads_valid_manifests():
     registry = load_pack_registry(FIXTURES_DIR / "packs_valid")
     assert sorted(registry.packs_by_id.keys()) == ["city_pack", "core_pack"]

@@ -8,18 +8,19 @@ from typing import Any, Dict, List
 from jsonschema import Draft7Validator
 
 
-PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
-DEFAULT_SCHEMA_PATH = PROJECT_ROOT / "schemas" / "pack_manifest_v0.schema.json"
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]  # climb from src/catalog/ to the repo root
+DEFAULT_SCHEMA_PATH = PROJECT_ROOT / "schemas" / "pack_manifest_v0.schema.json"  # JSON schema that every pack.json must satisfy
 
 
 @dataclass
+# Keep behavior deterministic so planner/runtime contracts stay stable.
 class PackRegistry:
-    packs_by_id: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    assets_by_id: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    tags_index: Dict[str, List[str]] = field(default_factory=dict)
-    errors: List[Dict[str, str]] = field(default_factory=list)
+    packs_by_id: Dict[str, Dict[str, Any]] = field(default_factory=dict)  # pack_id -> full manifest dict
+    assets_by_id: Dict[str, Dict[str, Any]] = field(default_factory=dict)  # asset_id -> {pack_id, asset} lookup
+    tags_index: Dict[str, List[str]] = field(default_factory=dict)  # pack_id -> tag list for search filtering
+    errors: List[Dict[str, str]] = field(default_factory=list)  # accumulated loading/validation errors
 
-    def search_packs(self, tags: List[str]) -> List[str]:
+    def search_packs(self, tags: List[str]) -> List[str]:  # find packs whose tags fully contain the query set
         if not tags:
             return sorted(self.packs_by_id.keys())
         required = set(tags)
@@ -30,17 +31,17 @@ class PackRegistry:
         return sorted(matches)
 
 
-_SCHEMA_CACHE: Dict[str, Any] | None = None
+_SCHEMA_CACHE: Dict[str, Any] | None = None  # cached to avoid re-reading schema JSON on every call
 
 
-def _load_schema(schema_path: pathlib.Path) -> Dict[str, Any]:
+def _load_schema(schema_path: pathlib.Path) -> Dict[str, Any]:  # lazy-loads and caches the pack JSON schema
     global _SCHEMA_CACHE
     if _SCHEMA_CACHE is None:
         _SCHEMA_CACHE = json.loads(schema_path.read_text(encoding="utf-8"))
     return _SCHEMA_CACHE
 
 
-def _format_error_path(path_parts: List[Any]) -> str:
+def _format_error_path(path_parts: List[Any]) -> str:  # converts jsonschema path tuples into dot-bracket notation like $.assets[0].role
     if not path_parts:
         return "$"
     out = "$"
@@ -58,7 +59,7 @@ def load_pack_registry(
 ) -> PackRegistry:
     packs_dir = pathlib.Path(packs_root)
     schema_file = pathlib.Path(schema_path)
-    schema = _load_schema(schema_file)
+    schema = _load_schema(schema_file)  # validate every manifest against the pack schema
     validator = Draft7Validator(schema)
 
     registry = PackRegistry()
@@ -69,7 +70,7 @@ def load_pack_registry(
         )
         return registry
 
-    manifest_paths = sorted(packs_dir.glob("**/pack.json"))
+    manifest_paths = sorted(packs_dir.glob("**/pack.json"))  # sorted for deterministic registration order
     for manifest_path in manifest_paths:
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -90,7 +91,7 @@ def load_pack_registry(
                 )
             continue
 
-        pack_id = manifest["pack_id"]
+        pack_id = manifest["pack_id"]  # guaranteed present after schema validation
         if pack_id in registry.packs_by_id:
             registry.errors.append(
                 {
@@ -100,8 +101,8 @@ def load_pack_registry(
             )
             continue
 
-        pack_copy = dict(manifest)
-        pack_copy["_manifest_path"] = str(manifest_path)
+        pack_copy = dict(manifest)  # shallow copy so we can attach metadata without mutating the original
+        pack_copy["_manifest_path"] = str(manifest_path)  # stash source path for debugging and substitution hints
         registry.packs_by_id[pack_id] = pack_copy
         registry.tags_index[pack_id] = list(manifest.get("tags", []))
 

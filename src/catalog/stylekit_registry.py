@@ -13,15 +13,16 @@ DEFAULT_SCHEMA_PATH = PROJECT_ROOT / "schemas" / "stylekit_manifest_v0.schema.js
 
 
 @dataclass
+# Keep behavior deterministic so planner/runtime contracts stay stable.
 class StyleKitRegistry:
-    stylekits_by_id: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    stylekits_by_id: Dict[str, Dict[str, Any]] = field(default_factory=dict)  # stylekit_id -> full stylekit manifest dict
     tags_index: Dict[str, List[str]] = field(default_factory=dict)
-    errors: List[Dict[str, str]] = field(default_factory=list)
+    errors: List[Dict[str, str]] = field(default_factory=list)  # accumulated loading/validation errors
 
     def list_stylekits(self) -> List[str]:
         return sorted(self.stylekits_by_id.keys())
 
-    def get_stylekit(self, stylekit_id: str) -> Dict[str, Any] | None:
+    def get_stylekit(self, stylekit_id: str) -> Dict[str, Any] | None:  # returns full manifest dict or None if not registered
         return self.stylekits_by_id.get(stylekit_id)
 
     def search_stylekits(self, tags: List[str]) -> List[str]:
@@ -35,7 +36,7 @@ class StyleKitRegistry:
         return sorted(matches)
 
 
-_SCHEMA_CACHE: Dict[str, Any] | None = None
+_SCHEMA_CACHE: Dict[str, Any] | None = None  # module-level cache so schema is read from disk only once
 
 
 def _load_schema(schema_path: pathlib.Path) -> Dict[str, Any]:
