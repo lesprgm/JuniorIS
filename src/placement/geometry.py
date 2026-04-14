@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, Iterable, List, Sequence, Tuple
+from typing import Any, Dict, List, Sequence, Tuple
 
 from src.placement.constants import (
     BASE_CAPACITY_SCALE,
@@ -17,17 +17,16 @@ from src.placement.constants import (
     NEAR_DISTANCE_PADDING_BY_DENSITY,
     NEAR_DISTANCE_SCALE_BY_DENSITY,
 )
-from src.placement.constraints import normalize_anchor_preferences
-from src.placement.role_defaults import (
-    KNOWN_ROLE_TOKENS,
-    ROLE_ALIASES,
-    ROLE_DEFAULT_ADJACENCY_TARGETS,
-    ROLE_FALLBACK_GEOMETRY,
-    ROLE_PRIORITY,
+from src.placement.role_defaults import ROLE_FALLBACK_GEOMETRY, ROLE_PRIORITY
+from src.placement.semantic_taxonomy import (
+    canonicalize_concept,
+    canonicalize_role_token,
+    ground_concept,
+    supported_runtime_roles,
 )
 
 
-def _normalize_tokens(*values: Any) -> List[str]:
+def _normalize_tokens(*values: Any) -> List[str]:  # extracts alphanumeric keywords from strings across multiple arguments
     out: List[str] = []
     for value in values:
         text = str(value or "").strip().lower().replace("/", " ").replace("_", " ").replace("-", " ")
@@ -37,26 +36,24 @@ def _normalize_tokens(*values: Any) -> List[str]:
     return out
 
 
-def _safe_text(value: Any) -> str:
+def _safe_text(value: Any) -> str:  # lowercases and strips string arguments for dictionary keys
     return str(value or "").strip().lower()
 
 
-def _resolve_known_role(token: str) -> str:
-    if not token:
-        return ""
-    if token in ROLE_ALIASES:
-        return ROLE_ALIASES[token]
-    singular = token[:-1] if token.endswith("s") else token
-    if singular in ROLE_ALIASES:
-        return ROLE_ALIASES[singular]
-    if singular in KNOWN_ROLE_TOKENS:
-        if singular == "storage":
-            return "cabinet"
-        return singular
-    return ""
+def _resolve_known_role(token: str) -> str:  # maps raw text back to supported exact role enums if possible
+    return canonicalize_role_token(token)
 
 
-def canonicalize_semantic_role(value: Any) -> str:
+def canonicalize_semantic_concept(value: Any) -> str:  # preserves finer semantic furniture concepts before runtime grounding
+    return canonicalize_concept(value)
+
+
+def map_semantic_concept_to_runtime_role(concept: Any, asset: Dict[str, Any] | None = None) -> Tuple[str, str]:
+    del asset
+    return ground_concept(concept)
+
+
+def canonicalize_semantic_role(value: Any) -> str:  # normalizes free-text role names into the runtime ontology of known roles
     token = _safe_text(value).replace("-", "_").replace(" ", "_").replace("/", "_")
     if not token:
         return ""
@@ -64,78 +61,63 @@ def canonicalize_semantic_role(value: Any) -> str:
     if resolved:
         return resolved
 
-    parts = [part for part in token.split("_") if part]
-    if parts and parts[-1] in {"area", "room", "space", "corner", "zone"}:
-        token = "_".join(parts[:-1])
-        resolved = _resolve_known_role(token)
-        if resolved:
-            return resolved
-        parts = [part for part in token.split("_") if part]
-    for index in range(len(parts)):
-        suffix = "_".join(parts[index:])
-        resolved = _resolve_known_role(suffix)
-        if resolved:
-            return resolved
+    concept = canonicalize_semantic_concept(token)
+    role, _ = map_semantic_concept_to_runtime_role(concept)
+    if role:
+        return role
 
-    for part in reversed(parts):
+    for part in reversed([part for part in token.split("_") if part]):
         resolved = _resolve_known_role(part)
         if resolved:
             return resolved
-
-    return token
-
-
-def _normalize_string_list(values: Any) -> List[str]:
-    if not isinstance(values, list):
-        return []
-    out: List[str] = []
-    for value in values:
-        if isinstance(value, str):
-            token = value.strip().lower()
-            if token:
-                out.append(token)
-    return out
+    return concept or token
 
 
-def semantic_role_key(record: Dict[str, Any]) -> str:
+def semantic_role_key(record: Dict[str, Any]) -> str:  # tries grounded/runtime fields first, then falls back to metadata-driven role inference
+    explicit_role = canonicalize_semantic_role(record.get("runtime_role") or record.get("selected_role") or record.get("role"))
+    supported_roles = supported_runtime_roles()
+    if explicit_role in supported_roles or explicit_role in ROLE_PRIORITY:
+        return explicit_role
+
     tags = record.get("tags") if isinstance(record.get("tags"), list) else []
-    role_values = tags + [
+    role_values = [
         record.get("category"),
-        record.get("role"),
         record.get("label"),
+        record.get("room_role_subtype"),
+        record.get("semantic_concept"),
+    ] + tags + [
         record.get("asset_id"),
         record.get("requested_asset_id"),
     ]
     for value in role_values:
         canonical = canonicalize_semantic_role(value)
-        if canonical in KNOWN_ROLE_TOKENS or canonical in ROLE_PRIORITY:
+        if canonical in supported_roles or canonical in ROLE_PRIORITY:
             return canonical
     for token in _normalize_tokens(*role_values):
         canonical = canonicalize_semantic_role(token)
-        if canonical in KNOWN_ROLE_TOKENS or canonical in ROLE_PRIORITY:
+        if canonical in supported_roles or canonical in ROLE_PRIORITY:
             return canonical
     asset_id = _safe_text(record.get("asset_id") or record.get("requested_asset_id") or "asset")
     return asset_id or "asset"
 
-
-def placement_priority(record: Dict[str, Any]) -> int:
+def placement_priority(record: Dict[str, Any]) -> int:  # higher-priority roles (bed=100, sofa=90) are placed first
     return ROLE_PRIORITY.get(semantic_role_key(record), 10)
 
 
-def _base_geometry_for_role(role: str) -> Dict[str, Any]:
+def _base_geometry_for_role(role: str) -> Dict[str, Any]:  # returns expected approximate footprint radius for standard furniture types
     base = ROLE_FALLBACK_GEOMETRY.get(role) or ROLE_FALLBACK_GEOMETRY["asset"]
     profile = dict(base)
     profile["placement_role"] = role
     return profile
 
 
-def _normalized_scale(scale: Any) -> Tuple[float, float, float]:
+def _normalized_scale(scale: Any) -> Tuple[float, float, float]:  # enforces uniform XYZ mesh scaling
     if isinstance(scale, list) and len(scale) == 3 and all(isinstance(v, (int, float)) for v in scale):
         return tuple(max(float(v), 0.1) for v in scale)
     return (1.0, 1.0, 1.0)
 
 
-def _bounds_size(record: Dict[str, Any], scale: Tuple[float, float, float]) -> Tuple[float, float] | None:
+def _bounds_size(record: Dict[str, Any], scale: Tuple[float, float, float]) -> Tuple[float, float] | None:  # calculates true rendered XZ footprint from base bounds and applied scale
     bounds = record.get("bounds") if isinstance(record.get("bounds"), dict) else None
     size = bounds.get("size") if isinstance(bounds, dict) and isinstance(bounds.get("size"), dict) else None
     if not isinstance(size, dict):
@@ -147,12 +129,12 @@ def _bounds_size(record: Dict[str, Any], scale: Tuple[float, float, float]) -> T
     return max(float(size_x) * scale[0], 0.1), max(float(size_z) * scale[2], 0.1)
 
 
-def normalize_density_profile(value: Any) -> str:
+def normalize_density_profile(value: Any) -> str:  # coerces arbitrary input to one of minimal/normal/cluttered
     token = _safe_text(value or "normal")
     return token if token in DENSITY_MULTIPLIERS else "normal"
 
 
-def normalize_layout_mood(value: Any, density_profile: str) -> str:
+def normalize_layout_mood(value: Any, density_profile: str) -> str:  # validates the explicit layout mood chosen by the model
     token = _safe_text(value)
     if token in {"open", "cozy", "crowded"}:
         return token
@@ -163,84 +145,7 @@ def normalize_layout_mood(value: Any, density_profile: str) -> str:
     return "cozy"
 
 
-def _normalize_adjacency_pairs(values: Any, known_roles: set[str]) -> List[Dict[str, str]]:
-    out: List[Dict[str, str]] = []
-    if not isinstance(values, list):
-        return out
-    seen: set[Tuple[str, str, str]] = set()
-    for value in values:
-        if not isinstance(value, dict):
-            continue
-        source_role = _safe_text(value.get("source_role"))
-        target_role = _safe_text(value.get("target_role"))
-        relation = _safe_text(value.get("relation") or "near") or "near"
-        if relation != "near":
-            continue
-        if not source_role or not target_role:
-            continue
-        if known_roles and (source_role not in known_roles or target_role not in known_roles):
-            continue
-        key = (source_role, target_role, relation)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append({"source_role": source_role, "target_role": target_role, "relation": relation})
-    return out
-
-
-def default_placement_intent(intent_spec: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    intent_spec = intent_spec or {}
-    style_tags = set(_normalize_string_list(intent_spec.get("style_tags")))
-    required_roles = _normalize_string_list(intent_spec.get("required_roles"))
-    optional_roles = _normalize_string_list(intent_spec.get("optional_roles"))
-    known_roles = set(required_roles + optional_roles)
-
-    density_profile = normalize_density_profile(intent_spec.get("density_profile"))
-    anchor_preferences: List[str] = []
-    if density_profile == "cluttered":
-        anchor_preferences.append("clustered")
-    if {"cozy", "reading"} & style_tags:
-        anchor_preferences.append("reading_nook")
-
-    adjacency_pairs: List[Dict[str, str]] = []
-    for source_role, target_roles in ROLE_DEFAULT_ADJACENCY_TARGETS.items():
-        if source_role not in known_roles:
-            continue
-        for target_role in target_roles:
-            if target_role in known_roles:
-                adjacency_pairs.append({"source_role": source_role, "target_role": target_role, "relation": "near"})
-                break
-
-    return {
-        "density_profile": density_profile,
-        "anchor_preferences": anchor_preferences,
-        "adjacency_pairs": adjacency_pairs,
-        "layout_mood": normalize_layout_mood(intent_spec.get("layout_mood"), density_profile),
-    }
-
-
-def normalize_placement_intent(raw_intent: Any, intent_spec: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    if not isinstance(raw_intent, dict):
-        return default_placement_intent(intent_spec)
-
-    intent_spec = intent_spec or {}
-    required_roles = _normalize_string_list(intent_spec.get("required_roles"))
-    optional_roles = _normalize_string_list(intent_spec.get("optional_roles"))
-    known_roles = set(required_roles + optional_roles)
-    default_intent = default_placement_intent(intent_spec)
-    density_profile = normalize_density_profile(raw_intent.get("density_profile") or default_intent["density_profile"])
-    anchor_preferences = normalize_anchor_preferences(raw_intent.get("anchor_preferences")) or default_intent["anchor_preferences"]
-    adjacency_pairs = _normalize_adjacency_pairs(raw_intent.get("adjacency_pairs"), known_roles) or default_intent["adjacency_pairs"]
-    layout_mood = normalize_layout_mood(raw_intent.get("layout_mood") or default_intent["layout_mood"], density_profile)
-    return {
-        "density_profile": density_profile,
-        "anchor_preferences": anchor_preferences,
-        "adjacency_pairs": adjacency_pairs,
-        "layout_mood": layout_mood,
-    }
-
-
-def geometry_profile_from_asset(record: Dict[str, Any], scale: Any = None) -> Dict[str, Any]:
+def geometry_profile_from_asset(record: Dict[str, Any], scale: Any = None) -> Dict[str, Any]:  # computes footprint radius, wall clearance, and near distance from asset bounds
     role = semantic_role_key(record)
     base = _base_geometry_for_role(role)
     normalized_scale = _normalized_scale(scale if scale is not None else record.get("transform", {}).get("scale"))
@@ -274,12 +179,12 @@ def geometry_profile_from_asset(record: Dict[str, Any], scale: Any = None) -> Di
     }
 
 
-def collision_padding_for_profile(profile: Dict[str, Any]) -> float:
+def collision_padding_for_profile(profile: Dict[str, Any]) -> float:  # returns the padding distance based on collision class (compact/standard/wide)
     profile_class = _safe_text(profile.get("collision_padding_class") or "standard")
     return COLLISION_PADDING_BY_CLASS.get(profile_class, MIN_COLLISION_PADDING)
 
 
-def derive_wall_inset(profile: Dict[str, Any]) -> float:
+def derive_wall_inset(profile: Dict[str, Any]) -> float:  # how far from the wall the object center must be placed
     return round(
         max(
             MIN_WALL_INSET,
@@ -289,7 +194,7 @@ def derive_wall_inset(profile: Dict[str, Any]) -> float:
     )
 
 
-def derive_near_distance(
+def derive_near_distance(  # fallback inference of near-distance given collision profiles
     source_profile: Dict[str, Any],
     target_profile: Dict[str, Any],
     density_profile: str = "normal",
@@ -312,7 +217,7 @@ def derive_near_distance(
     return round(min(derived, MAX_NEAR_DISTANCE), 3)
 
 
-def room_capacity_summary(
+def room_capacity_summary(  # estimates how many objects the room can hold based on area, density, and average footprint
     dimensions: Dict[str, float],
     geometry_profiles: Sequence[Dict[str, Any]],
     density_profile: str,
