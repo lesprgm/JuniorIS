@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import annotations  # enable PEP 604 union syntax in older Pythons
 
 import json
 import pathlib
@@ -10,20 +10,21 @@ from src.compilation.phase0 import compile_phase0
 from src.planning.planner import plan_worldspec
 from src.contracts.runtime import resolve_stylekit_runtime_payload
 from src.runtime.decor_plan import build_runtime_decor_plan, build_runtime_scene_context
+from src.voice.service import build_chatter_plan, build_tts_artifact, maybe_play_local_audio
 
-BUILD_ROOT = pathlib.Path("build")
-PORTAL_READY_PHASE = "phase0"
-API_CONTRACT_VERSION = "0.2"
-_ERROR_RECOVERABLE = {
+BUILD_ROOT = pathlib.Path("build")  # default output directory for compiled world artifacts
+PORTAL_READY_PHASE = "phase0"  # Unity opens portal once this phase is available
+API_CONTRACT_VERSION = "0.2"  # client-checked version; bump on breaking response changes
+_ERROR_RECOVERABLE = {  # whether the client may show a "try again" UX for each error class
     "invalid_request": True,
     "planner_failed": True,
     "compile_failed": True,
     "spawn_failed": True,
     "manifest_failed": True,
-    "internal_error": False,
+    "internal_error": False,  # internal errors cannot be recovered by the user
 }
-_ERROR_RETRYABLE = {
-    "invalid_request": False,
+_ERROR_RETRYABLE = {  # whether automatic retry is meaningful for each error class
+    "invalid_request": False,  # re-sending bad input will fail identically
     "planner_failed": True,
     "compile_failed": True,
     "spawn_failed": True,
@@ -32,15 +33,15 @@ _ERROR_RETRYABLE = {
 }
 
 
-def _utc_now_iso() -> str:
+def _utc_now_iso() -> str:  # compact UTC timestamp for manifest and response headers
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _new_request_id() -> str:
+def _new_request_id() -> str:  # unique per API submission; embedded in every error response
     return f"req_{uuid.uuid4().hex[:12]}"
 
 
-def _new_trace_id() -> str:
+def _new_trace_id() -> str:  # correlates planner, compiler, and manifest writing for one request
     return f"trace_{uuid.uuid4().hex[:12]}"
 
 
@@ -53,8 +54,8 @@ def _error(
     extra: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     details = errors or []
-    retryable = _ERROR_RETRYABLE.get(error_code, False)
-    payload: Dict[str, Any] = {
+    retryable = _ERROR_RETRYABLE.get(error_code, False)  # decide if client should auto-retry
+    payload: Dict[str, Any] = {  # error envelope matching the API contract
         "api_contract_version": API_CONTRACT_VERSION,
         "ok": False,
         "request_id": request_id,
@@ -72,18 +73,21 @@ def _error(
     return payload
 
 
-def _planner_response_fields(planner_result: Dict[str, Any]) -> Dict[str, Any]:
+def _planner_response_fields(planner_result: Dict[str, Any]) -> Dict[str, Any]:  # cherry-pick planner diagnostics safe for the API response
     fields: Dict[str, Any] = {}
     for key, expected_type in (
         ("prompt_plan", dict),
         ("planner_backend", str),
         ("candidate_asset_ids", list),
         ("semantic_receipts", dict),
+        ("scene_program", dict),
         ("semantic_path_status", str),
         ("intent_spec", dict),
+        ("invalid_intent_payload", dict),
         ("placement_intent", dict),
-        ("missing_required_roles", list),
-        ("covered_required_roles", list),
+        ("missing_required_slots", list),
+        ("covered_required_slots", list),
+        ("slot_diagnostics", list),
         ("selected_asset_ids", list),
     ):
         value = planner_result.get(key)
@@ -93,11 +97,11 @@ def _planner_response_fields(planner_result: Dict[str, Any]) -> Dict[str, Any]:
     return fields
 
 
-def _planner_context(planner_result: Dict[str, Any]) -> tuple[Dict[str, Any], str | None]:
+def _planner_context(planner_result: Dict[str, Any]) -> tuple[Dict[str, Any], str | None]:  # pair diagnostic fields with the error code for downstream branching
     return _planner_response_fields(planner_result), planner_result.get("error_code")
 
 
-def _prompt_plan_manifest(prompt_plan: Dict[str, Any]) -> Dict[str, Any]:
+def _prompt_plan_manifest(prompt_plan: Dict[str, Any]) -> Dict[str, Any]:  # strip internal variants; manifest only needs the selected prompt
     return {
         "mode": prompt_plan.get("mode"),
         "strategy": prompt_plan.get("strategy"),
@@ -106,7 +110,7 @@ def _prompt_plan_manifest(prompt_plan: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _normalized_manifest_object(value: Any) -> Dict[str, Any]:
+def _normalized_manifest_object(value: Any) -> Dict[str, Any]:  # coerce None into empty dict so manifest JSON stays self-consistent
     return dict(value) if isinstance(value, dict) else {}
 
 
@@ -147,6 +151,7 @@ def _write_manifest(
     candidate_asset_ids: Optional[list[str]] = None,
     semantic_path_status: Optional[str] = None,
     intent_spec: Optional[Dict[str, Any]] = None,
+    scene_program: Optional[Dict[str, Any]] = None,
 ) -> pathlib.Path:
     # Keep the manifest narrow and runtime-focused so Unity does not need to
     # understand the full backend planner/compiler internals.
@@ -163,7 +168,13 @@ def _write_manifest(
         intent_spec=intent_spec,
         placement_intent=worldspec.get("placement_intent"),
         selected_assets=worldspec.get("placements") or [],
+        scene_program=scene_program,
     )
+    if isinstance(worldspec.get("scene_context"), dict):
+        scene_context = {
+            **scene_context,
+            **_normalized_manifest_object(worldspec.get("scene_context")),
+        }
     manifest_payload = {
         "manifest_version": "0.2",
         "generated_at_utc": _utc_now_iso(),
@@ -183,7 +194,10 @@ def _write_manifest(
             }
         },
         "budgets": worldspec.get("budgets", {}),
+        "optional_additions": worldspec.get("optional_additions", []),
         "colors": _normalized_manifest_object(worldspec.get("colors")),
+        "surface_material_selection": _normalized_manifest_object(worldspec.get("surface_material_selection")),
+        "shell_material_bindings": _normalized_manifest_object(phase0_data.get("shell_material_bindings")),
         "placement_intent": _normalized_manifest_object(worldspec.get("placement_intent")),
         "placement_plan": _normalized_manifest_object(worldspec.get("placement_plan")),
         "scene_context": scene_context,
@@ -192,6 +206,8 @@ def _write_manifest(
             placement_intent=worldspec.get("placement_intent"),
             selected_assets=worldspec.get("placements") or [],
             scene_context=scene_context,
+            scene_program=scene_program,
+            selection_decor_plan=worldspec.get("decor_plan") if isinstance(worldspec.get("decor_plan"), dict) else None,
         ),
     }
     if isinstance(prompt_plan, dict):
@@ -199,10 +215,10 @@ def _write_manifest(
     if isinstance(planner_backend, str) and planner_backend:
         manifest_payload["planner_backend"] = planner_backend
     if isinstance(candidate_asset_ids, list) and candidate_asset_ids:
-        manifest_payload["candidate_asset_ids"] = candidate_asset_ids[:40]
+        manifest_payload["candidate_asset_ids"] = candidate_asset_ids[:40]  # cap at 40 to bound manifest size
     if isinstance(semantic_path_status, str):
         manifest_payload["semantic_path_status"] = semantic_path_status
-    stylekit_payload = resolve_stylekit_runtime_payload(worldspec.get("stylekit_id"))
+    stylekit_payload = resolve_stylekit_runtime_payload(worldspec.get("stylekit_id"))  # populate lighting, palette, skybox for Unity loader
     manifest_payload["stylekit"] = {
         "stylekit_id": stylekit_payload.get("stylekit_id"),
         "lighting": stylekit_payload.get("lighting"),
@@ -222,7 +238,7 @@ def _compile_error_response(
     planner_extra: Dict[str, Any],
 ) -> Dict[str, Any]:
     compile_errors = compile_result.get("errors", [])
-    has_spawn_error = any(
+    has_spawn_error = any(  # distinguish spawn-only failures so the client can show a targeted UX
         isinstance(err, dict) and str(err.get("path", "")).startswith("$.safe_spawn")
         for err in compile_errors
     )
@@ -238,12 +254,12 @@ def _compile_error_response(
     )
 
 
-def _status_code_for_error(error_code: Any) -> int:
-    if error_code == "invalid_request":
+def _status_code_for_error(error_code: Any) -> int:  # map semantic error codes to HTTP status
+    if error_code == "invalid_request":  # client sent bad payload
         return 400
-    if error_code in {"planner_failed", "compile_failed", "spawn_failed"}:
+    if error_code in {"planner_failed", "compile_failed", "spawn_failed"}:  # server understood request but couldn't fulfill it
         return 422
-    return 500
+    return 500  # unexpected internal failures
 
 
 def _invalid_request_error(
@@ -262,6 +278,94 @@ def _invalid_request_error(
     )
 
 
+def _validated_request(
+    prompt_text: str,
+    optional_seed: Optional[int],
+    request_id: str,
+    trace_id: str,
+) -> Dict[str, Any] | None:
+    prompt = (prompt_text or "").strip()
+    if not prompt:
+        return _invalid_request_error(
+            request_id,
+            trace_id,
+            "Prompt is empty.",
+            "$.prompt_text",
+            "prompt_text must be a non-empty string",
+        )
+    if optional_seed is not None and (isinstance(optional_seed, bool) or not isinstance(optional_seed, int)):
+        return _invalid_request_error(
+            request_id,
+            trace_id,
+            "Seed must be an integer.",
+            "$.optional_seed",
+            "optional_seed must be an integer",
+        )
+    if optional_seed is not None and (optional_seed < 0 or optional_seed > 2_147_483_647):
+        return _invalid_request_error(
+            request_id,
+            trace_id,
+            "Seed is outside supported range.",
+            "$.optional_seed",
+            "optional_seed must be between 0 and 2147483647",
+        )
+    return None
+
+
+def _planner_error_response(
+    planner_result: Dict[str, Any],
+    *,
+    request_id: str,
+    trace_id: str,
+) -> Dict[str, Any]:
+    planner_extra, planner_error_code = _planner_context(planner_result)
+    user_message = "Could not build a valid world plan for this prompt."
+    if isinstance(planner_error_code, str) and planner_error_code.startswith("llm_"):
+        user_message = "LLM planner failed for this prompt. Retry or switch planner mode."
+    return _error(
+        "planner_failed",
+        user_message,
+        request_id,
+        trace_id,
+        planner_result.get("errors", []),
+        extra={
+            **planner_extra,
+            "planner_error_code": planner_error_code,
+        }
+        if planner_extra or planner_error_code
+        else None,
+    )
+
+
+def _success_response(
+    *,
+    request_id: str,
+    trace_id: str,
+    world_id: str,
+    manifest_path: pathlib.Path,
+    compile_result: Dict[str, Any],
+    planner_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    readiness = _build_readiness(compile_result)
+    response = {
+        "api_contract_version": API_CONTRACT_VERSION,
+        "ok": True,
+        "request_id": request_id,
+        "trace_id": trace_id,
+        "world_id": world_id,
+        "manifest_url": f"/build/{world_id}/manifest.json",
+        "manifest_path": str(manifest_path),
+        "portal_ready_at_phase": PORTAL_READY_PHASE,
+        "readiness": readiness,
+        "errors": [],
+    }
+    response.update(_planner_response_fields(planner_result))
+    prompt_plan = planner_result.get("prompt_plan")
+    if isinstance(prompt_plan, dict):
+        response["selected_prompt"] = prompt_plan.get("selected_prompt")
+    return response
+
+
 def run_plan_and_compile(
     prompt_text: str,
     optional_seed: Optional[int] = None,
@@ -272,36 +376,12 @@ def run_plan_and_compile(
     # response can be traced back to one submission.
     request_id = _new_request_id()
     trace_id = _new_trace_id()
-
+    request_error = _validated_request(prompt_text, optional_seed, request_id, trace_id)
+    if request_error is not None:
+        return request_error
     prompt = (prompt_text or "").strip()
-    if not prompt:
-        return _invalid_request_error(
-            request_id,
-            trace_id,
-            "Prompt is empty.",
-            "$.prompt_text",
-            "prompt_text must be a non-empty string",
-        )
 
-    if optional_seed is not None and (isinstance(optional_seed, bool) or not isinstance(optional_seed, int)):
-        return _invalid_request_error(
-            request_id,
-            trace_id,
-            "Seed must be an integer.",
-            "$.optional_seed",
-            "optional_seed must be an integer",
-        )
-
-    if optional_seed is not None and (optional_seed < 0 or optional_seed > 2_147_483_647):
-        return _invalid_request_error(
-            request_id,
-            trace_id,
-            "Seed is outside supported range.",
-            "$.optional_seed",
-            "optional_seed must be between 0 and 2147483647",
-        )
-
-    normalized_prefs: Dict[str, Any] = user_prefs if isinstance(user_prefs, dict) else {}
+    normalized_prefs: Dict[str, Any] = user_prefs if isinstance(user_prefs, dict) else {}  # guard against None so downstream code can always index into prefs
 
     try:
         # The planner owns semantic selection; compile_phase0 only sees a
@@ -315,29 +395,8 @@ def run_plan_and_compile(
             trace_id,
             [{"path": "$.planner", "message": "unhandled planner exception"}],
         )
-    prompt_plan = planner_result.get("prompt_plan")
-    planner_backend = planner_result.get("planner_backend")
-    candidate_asset_ids = planner_result.get("candidate_asset_ids")
-    semantic_receipts = planner_result.get("semantic_receipts")
-    semantic_path_status = planner_result.get("semantic_path_status")
-    planner_extra, planner_error_code = _planner_context(planner_result)
     if not planner_result.get("ok"):
-        user_message = "Could not build a valid world plan for this prompt."
-        if isinstance(planner_error_code, str) and planner_error_code.startswith("llm_"):
-            user_message = "LLM planner failed for this prompt. Retry or switch planner mode."
-        return _error(
-            "planner_failed",
-            user_message,
-            request_id,
-            trace_id,
-            planner_result.get("errors", []),
-            extra={
-                **planner_extra,
-                "planner_error_code": planner_error_code,
-            }
-            if planner_extra or planner_error_code
-            else None,
-        )
+        return _planner_error_response(planner_result, request_id=request_id, trace_id=trace_id)
 
     worldspec = planner_result.get("worldspec")
     if not isinstance(worldspec, dict):
@@ -347,11 +406,11 @@ def run_plan_and_compile(
             request_id,
             trace_id,
             [{"path": "$.worldspec", "message": "planner result missing worldspec object"}],
-            extra=planner_extra,
+            extra=_planner_response_fields(planner_result),
         )
 
     try:
-        compile_result = compile_phase0(worldspec, build_root=build_root, write_artifact=True)
+        compile_result = compile_phase0(worldspec, build_root=build_root, write_artifact=True)  # run the deterministic placer and write phase0 JSON to disk
     except Exception:
         return _error(
             "internal_error",
@@ -361,7 +420,12 @@ def run_plan_and_compile(
             [{"path": "$.compile", "message": "unhandled compiler exception"}],
         )
     if not compile_result.get("ok"):
-        return _compile_error_response(compile_result, request_id, trace_id, planner_extra)
+        return _compile_error_response(
+            compile_result,
+            request_id,
+            trace_id,
+            _planner_response_fields(planner_result),
+        )
 
     world_id = str(compile_result["world_id"])
     try:
@@ -370,11 +434,12 @@ def run_plan_and_compile(
             world_id,
             worldspec,
             compile_result,
-            prompt_plan=prompt_plan if isinstance(prompt_plan, dict) else None,
-            planner_backend=planner_backend if isinstance(planner_backend, str) else None,
-            candidate_asset_ids=candidate_asset_ids if isinstance(candidate_asset_ids, list) else None,
-            semantic_path_status=semantic_path_status if isinstance(semantic_path_status, str) else None,
+            prompt_plan=planner_result.get("prompt_plan") if isinstance(planner_result.get("prompt_plan"), dict) else None,
+            planner_backend=planner_result.get("planner_backend") if isinstance(planner_result.get("planner_backend"), str) else None,
+            candidate_asset_ids=planner_result.get("candidate_asset_ids") if isinstance(planner_result.get("candidate_asset_ids"), list) else None,
+            semantic_path_status=planner_result.get("semantic_path_status") if isinstance(planner_result.get("semantic_path_status"), str) else None,
             intent_spec=planner_result.get("intent_spec") if isinstance(planner_result.get("intent_spec"), dict) else None,
+            scene_program=planner_result.get("scene_program") if isinstance(planner_result.get("scene_program"), dict) else None,
         )
     except OSError as exc:
         return _error(
@@ -392,29 +457,20 @@ def run_plan_and_compile(
             trace_id,
             [{"path": "$.manifest", "message": "unhandled manifest exception"}],
         )
-
-    readiness = _build_readiness(compile_result)
-    response = {
-        "api_contract_version": API_CONTRACT_VERSION,
-        "ok": True,
-        "request_id": request_id,
-        "trace_id": trace_id,
-        "world_id": world_id,
-        "manifest_url": f"/build/{world_id}/manifest.json",
-        "manifest_path": str(manifest_path),
-        "portal_ready_at_phase": PORTAL_READY_PHASE,
-        "readiness": readiness,
-        "errors": [],
-    }
-    response.update(_planner_response_fields(planner_result))
-    if isinstance(prompt_plan, dict):
-        response["selected_prompt"] = prompt_plan.get("selected_prompt")
-    return response
+    return _success_response(
+        request_id=request_id,
+        trace_id=trace_id,
+        world_id=world_id,
+        manifest_path=manifest_path,
+        compile_result=compile_result,
+        planner_result=planner_result,
+    )
 
 
-try:
+try:  # FastAPI imports are optional so the planner can be used as a library without a server
     from fastapi import FastAPI
     from fastapi.responses import JSONResponse
+    from fastapi.responses import Response
     from fastapi.staticfiles import StaticFiles
     from pydantic import BaseModel, Field
 except ImportError:  # pragma: no cover - optional dependency for API serving
@@ -422,8 +478,9 @@ except ImportError:  # pragma: no cover - optional dependency for API serving
     BaseModel = object
     Field = None
     JSONResponse = None
+    Response = None
     StaticFiles = None
-    app = None
+    app = None  # prevents NameError if this module is imported but never served
 
 
 if FastAPI is not None:
@@ -432,12 +489,25 @@ if FastAPI is not None:
         optional_seed: Optional[int] = None
         user_prefs: Dict[str, Any] = Field(default_factory=dict)
 
+    class VoiceChatterPlanRequest(BaseModel):
+        prompt_text: str
+        phase: Optional[str] = None
+        scene_context: Dict[str, Any] = Field(default_factory=dict)
+        user_prefs: Dict[str, Any] = Field(default_factory=dict)
+        prefetch_audio: bool = False
+
+    class VoiceTtsRequest(BaseModel):
+        text: str
+        user_prefs: Dict[str, Any] = Field(default_factory=dict)
+        return_url: bool = True
+        play_local: bool = False
+
 
     app = FastAPI(title="JuniorIS Planner/Compiler API", version=API_CONTRACT_VERSION)
     BUILD_ROOT.mkdir(parents=True, exist_ok=True)
-    app.mount("/build", StaticFiles(directory=str(BUILD_ROOT), check_dir=True), name="build")
+    app.mount("/build", StaticFiles(directory=str(BUILD_ROOT), check_dir=True), name="build")  # serve compiled artifacts directly over HTTP for Unity client
 
-    @app.get("/healthz")
+    @app.get("/healthz")  # lightweight liveness probe for load-balancer or CI checks
     def healthz():
         return {
             "ok": True,
@@ -445,7 +515,7 @@ if FastAPI is not None:
             "build_root": str(BUILD_ROOT),
         }
 
-    @app.post("/plan_and_compile")
+    @app.post("/plan_and_compile")  # main endpoint: turns a prompt into a playable world
     def plan_and_compile(payload: PlanAndCompileRequest):
         result = run_plan_and_compile(
             prompt_text=payload.prompt_text,
@@ -458,6 +528,64 @@ if FastAPI is not None:
 
         status_code = _status_code_for_error(result.get("error_code"))
         return JSONResponse(content=result, status_code=status_code)
+
+    @app.post("/voice/chatter_plan")
+    def voice_chatter_plan(payload: VoiceChatterPlanRequest):
+        prompt = (payload.prompt_text or "").strip()
+        if not prompt:
+            return JSONResponse(
+                content=_invalid_request_error(
+                    _new_request_id(),
+                    _new_trace_id(),
+                    "Prompt is empty.",
+                    "$.prompt_text",
+                    "prompt_text must be a non-empty string",
+                ),
+                status_code=400,
+            )
+        plan = build_chatter_plan(
+            prompt_text=prompt,
+            scene_context=payload.scene_context,
+            phase=payload.phase,
+            user_prefs=payload.user_prefs,
+        )
+        return plan
+
+    @app.post("/voice/tts")
+    def voice_tts(payload: VoiceTtsRequest):
+        text = (payload.text or "").strip()
+        if not text:
+            return JSONResponse(
+                content=_invalid_request_error(
+                    _new_request_id(),
+                    _new_trace_id(),
+                    "Text is empty.",
+                    "$.text",
+                    "text must be a non-empty string",
+                ),
+                status_code=400,
+            )
+        artifact = build_tts_artifact(text, build_root=BUILD_ROOT, user_prefs=payload.user_prefs)
+        if not artifact.get("ok"):
+            return JSONResponse(
+                content={
+                    "ok": False,
+                    "error_code": artifact.get("error_code", "voice_failed"),
+                    "message": artifact.get("message", "Voice synthesis failed."),
+                },
+                status_code=503,
+            )
+        if payload.play_local:
+            maybe_play_local_audio(artifact["artifact_path"], enabled=True)
+        if payload.return_url:
+            return {
+                "ok": True,
+                "cache_key": artifact["cache_key"],
+                "audio_url": artifact["audio_url"],
+                "content_type": artifact["content_type"],
+            }
+        data = pathlib.Path(artifact["artifact_path"]).read_bytes()
+        return Response(content=data, media_type=artifact["content_type"])
 
 
 def main() -> int:
