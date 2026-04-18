@@ -1,8 +1,15 @@
 from src.placement.constraints import default_constraint_for_role
-from src.placement.geometry import derive_near_distance, geometry_profile_from_asset, room_capacity_summary
+from src.placement.geometry import (
+    derive_near_distance,
+    geometry_profile_from_asset,
+    normalize_density_profile,
+    normalize_layout_mood,
+    room_capacity_summary,
+)
 from src.world.templates import ROOM_BASIC_DIMENSIONS
 
 
+# Keep behavior deterministic so planner/runtime contracts stay stable.
 def _asset(asset_id: str, role: str, size_x: float | None = None, size_z: float | None = None):
     asset = {
         "asset_id": asset_id,
@@ -55,8 +62,15 @@ def test_default_constraint_prefers_intent_adjacency_then_wall_anchor():
     placement_intent = {
         "density_profile": "normal",
         "anchor_preferences": ["against_wall"],
-        "adjacency_pairs": [{"source_role": "chair", "target_role": "table", "relation": "near"}],
+        "adjacency_pairs": [{"source_role": "chair", "target_role": "table", "relation": "face_to"}],
         "layout_mood": "cozy",
     }
     assert default_constraint_for_role("chair", ["chair", "table"], placement_intent)["type"] == "near"
     assert default_constraint_for_role("sign", ["sign"], placement_intent)["type"] == "against_wall"
+
+
+def test_density_and_layout_normalization_are_strict():
+    assert normalize_density_profile("cluttered") == "cluttered"
+    assert normalize_density_profile("bad-value") == "normal"
+    assert normalize_layout_mood("crowded", "cluttered") == "crowded"
+    assert normalize_layout_mood("", "minimal") == "open"
