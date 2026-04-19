@@ -4,15 +4,16 @@ import math
 from typing import Any, Dict, Iterable, List, Tuple
 
 
-PLAYER_CAPSULE_RADIUS = 0.25
-PLAYER_CAPSULE_HEIGHT = 1.70
-WALL_MARGIN = 0.30
-BASE_PLACEMENT_RADIUS = 0.35
-RING_STEP = 0.50
-ANGLE_SEQUENCE = (0, 45, 90, 135, 180, 225, 270, 315)
-DEFAULT_ROTATION_Y = 180.0
+PLAYER_CAPSULE_RADIUS = 0.25  # VR player collision radius in meters
+PLAYER_CAPSULE_HEIGHT = 1.70  # standing player height for ceiling clearance checks
+WALL_MARGIN = 0.30  # minimum clearance from walls for spawn candidates
+BASE_PLACEMENT_RADIUS = 0.35  # default occupancy radius when asset bounds are unknown
+RING_STEP = 0.50  # distance between concentric search rings
+ANGLE_SEQUENCE = (0, 45, 90, 135, 180, 225, 270, 315)  # 8 directions tested per ring
+DEFAULT_ROTATION_Y = 180.0  # player faces the back wall by default
 
 
+# Keep behavior deterministic so planner/runtime contracts stay stable.
 def _to_float(value: Any, default: float) -> float:
     if isinstance(value, (int, float)):
         return float(value)
@@ -149,7 +150,7 @@ def _clamp_to_room(x: float, z: float, room_bounds: Dict[str, float]) -> Tuple[f
     return (round(clamped_x, 3), round(clamped_z, 3))
 
 
-def find_safe_spawn(phase0_data: Dict[str, Any]) -> Dict[str, Any]:
+def find_safe_spawn(phase0_data: Dict[str, Any]) -> Dict[str, Any]:  # spirals outward from room center to find an unobstructed teleportable position
     template = phase0_data.get("template")
     template = template if isinstance(template, dict) else {}
     room_bounds = _extract_room_bounds(template)

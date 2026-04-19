@@ -9,12 +9,13 @@ from jsonschema import Draft7Validator
 
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
-SCHEMA_PATH = PROJECT_ROOT / "schemas" / "worldspec_v0.schema.json"
+SCHEMA_PATH = PROJECT_ROOT / "schemas" / "worldspec_v0.schema.json"  # JSON schema that every WorldSpec must pass before compilation
 
 
-_SCHEMA_CACHE: Dict[str, Any] | None = None
+_SCHEMA_CACHE: Dict[str, Any] | None = None  # cached to avoid re-reading schema JSON on every validation call
 
 
+# Keep behavior deterministic so planner/runtime contracts stay stable.
 def _load_schema() -> Dict[str, Any]:
     global _SCHEMA_CACHE
     if _SCHEMA_CACHE is None:
@@ -34,7 +35,7 @@ def _format_error_path(path_parts: List[Any]) -> str:
     return out
 
 
-def validate_worldspec(data: Dict[str, Any]) -> Dict[str, Any]:
+def validate_worldspec(data: Dict[str, Any]) -> Dict[str, Any]:  # validates a WorldSpec dict against the JSON schema and checks constraint semantics
     schema = _load_schema()
     validator = Draft7Validator(schema)
     errors = []
@@ -69,6 +70,16 @@ def validate_worldspec(data: Dict[str, Any]) -> Dict[str, Any]:
                         "message": "near constraint distance must be numeric",
                     }
                 )
+            if constraint_type in {"wall", "surface", "ceiling"} and placement.get("transform"):
+                transform = placement.get("transform")
+                pos = transform.get("pos") if isinstance(transform, dict) else None
+                if not (isinstance(pos, list) and len(pos) == 3 and all(isinstance(value, (int, float)) for value in pos)):
+                    errors.append(
+                        {
+                            "path": f"$.placements[{index}].transform.pos",
+                            "message": f"{constraint_type} placements require a numeric position vector.",
+                        }
+                    )
     return {"ok": len(errors) == 0, "errors": errors}
 
 

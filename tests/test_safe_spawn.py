@@ -8,6 +8,7 @@ from src.runtime.safe_spawn import find_safe_spawn
 FIXTURES_DIR = pathlib.Path(__file__).resolve().parent / "fixtures"
 
 
+# Keep behavior deterministic so planner/runtime contracts stay stable.
 def _load(name: str):
     return json.loads((FIXTURES_DIR / name).read_text(encoding="utf-8"))
 

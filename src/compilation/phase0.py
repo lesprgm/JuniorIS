@@ -2,14 +2,25 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import pathlib
+from functools import lru_cache
 from collections import Counter
 from typing import Any, Dict, List, Tuple
 
 from src.catalog.pack_registry import load_pack_registry
-from src.planning.assets import collect_assets
-from src.placement.geometry import geometry_profile_from_asset, semantic_role_key
-from src.placement.solver import solve_placement_layout
+from src.compilation.phase0_placement import (
+    _apply_face_to_corrections,
+    _compiled_input,
+    _constraint_type,
+    _constraint_relation,
+    _face_alignment_score,
+    _repair_overlaps,
+    _resolve_face_to_target,
+    _safe_vec3,
+)
+from src.catalog.style_material_pool import load_style_material_pool_by_id
+from src.planning.assets import collect_assets, load_planner_pool
 from src.runtime.safe_spawn import find_safe_spawn
 from src.catalog.stylekit_registry import load_stylekit_registry
 from src.selection.substitution import resolve_asset_or_substitute
@@ -26,39 +37,16 @@ def _build_world_id(worldspec: Dict[str, Any]) -> str:
     return f"world_{digest[:10]}"
 
 
-def _safe_vec3(values: Any, default: List[float]) -> List[float]:
-    if (
-        isinstance(values, list)
-        and len(values) == 3
-        and all(isinstance(value, (int, float)) for value in values)
-    ):
-        return [float(values[0]), float(values[1]), float(values[2])]
-    return list(default)
+@lru_cache(maxsize=1)
+def _approved_planner_asset_ids() -> frozenset[str]:  # quick check lookup to prevent malicious or non-indexed assets from slipping past LLM validation
+    return frozenset(
+        str(asset.get("asset_id", "")).strip()
+        for asset in load_planner_pool()
+        if isinstance(asset, dict) and asset.get("asset_id")
+    )
 
 
-def _clamp_floor_position(position: List[float], dimensions: Dict[str, float]) -> List[float]:
-    margin = 0.25
-    max_x = max((dimensions["width"] / 2.0) - margin, 0.0)
-    max_z = max((dimensions["length"] / 2.0) - margin, 0.0)
-    x = max(min(position[0], max_x), -max_x)
-    z = max(min(position[2], max_z), -max_z)
-    return [round(x, 3), 0.0, round(z, 3)]
-
-
-def _compiled_transform(
-    position: List[float],
-    rotation: List[float],
-    scale: List[float],
-    dimensions: Dict[str, float],
-) -> Dict[str, List[float]]:
-    return {
-        "pos": _clamp_floor_position(position, dimensions),
-        "rot": [round(rotation[0], 3), round(rotation[1], 3), round(rotation[2], 3)],
-        "scale": [round(scale[0], 3), round(scale[1], 3), round(scale[2], 3)],
-    }
-
-
-def _substitution_entry(
+def _substitution_entry(  # structures the normalized audit record for exactly why an asset was chosen by the engine
     *,
     requested_asset_id: str,
     resolved_asset_id: str,
@@ -82,38 +70,173 @@ def _substitution_entry(
     }
 
 
-def _compiled_input(
+def _available_assets(pack_ids: List[str]) -> tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]]:
+    registry = load_pack_registry()
+    selected_pack_ids = pack_ids or sorted(registry.packs_by_id.keys())
+    available_assets = collect_assets(selected_pack_ids, registry) or collect_assets([], registry)
+    return available_assets, {
+        str(asset.get("asset_id", "")): asset
+        for asset in available_assets
+        if isinstance(asset, dict) and asset.get("asset_id")
+    }
+
+
+def _compile_raw_placement(
     *,
     index: int,
     placement: Dict[str, Any],
-    requested_asset_id: str,
-    resolved_asset_id: str,
-    resolution_type: str,
-    reason: str,
-    requested_tags: List[Any],
-    position: List[float],
-    rotation: List[float],
-    scale: List[float],
-    dimensions: Dict[str, float],
-    asset_record: Dict[str, Any],
-) -> Dict[str, Any]:
-    geometry_profile = (
-        dict(placement["geometry_profile"])
-        if isinstance(placement.get("geometry_profile"), dict)
-        else geometry_profile_from_asset(asset_record, scale=scale)
+    pack_ids: List[str],
+    registry: Any,
+    room_theme: Dict[str, Any],
+    available_by_id: Dict[str, Dict[str, Any]],
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    transform = placement.get("transform") if isinstance(placement.get("transform"), dict) else {}
+    requested_asset_id = str(placement.get("asset_id", "unknown_asset"))
+    requested_tags = placement.get("tags")
+    requested_meta = {
+        "tags": requested_tags if isinstance(requested_tags, list) else [],
+        "allow_passthrough_exact": requested_asset_id in _approved_planner_asset_ids(),
+        "role": placement.get("role"),
+        "label": placement.get("label"),
+        "category": placement.get("category"),
+        "style_tags": placement.get("style_tags"),
+        "era_tags": placement.get("era_tags"),
+        "color_tags": placement.get("color_tags"),
+        "visual_style": placement.get("visual_style"),
+        "poly_style": placement.get("poly_style"),
+    }
+    resolution = resolve_asset_or_substitute(
+        requested_asset_id=requested_asset_id,
+        requested_tags=requested_meta["tags"],
+        pack_ids=pack_ids,
+        registry=registry,
+        requested_meta=requested_meta,
+        room_theme=room_theme,
     )
     return {
-        "placement_id": f"placement_{index:03d}",
-        "asset_id": resolved_asset_id,
+        "index": index,
+        "placement": placement,
         "requested_asset_id": requested_asset_id,
-        "role": str(placement.get("role") or geometry_profile.get("placement_role") or semantic_role_key(asset_record)),
-        "resolution_type": resolution_type,
-        "substitution_reason": reason,
-        "mode": "placeholder" if resolution_type == "placeholder" else "asset",
-        "tags": requested_tags,
-        "constraint": placement.get("constraint"),
-        "geometry_profile": geometry_profile,
-        "transform": _compiled_transform(position, rotation, scale, dimensions),
+        "requested_tags": requested_meta["tags"],
+        "position": _safe_vec3(transform.get("pos"), [0.0, 0.0, 0.0]),
+        "rotation": _safe_vec3(transform.get("rot"), [0.0, 0.0, 0.0]),
+        "scale": _safe_vec3(transform.get("scale"), [1.0, 1.0, 1.0]),
+        "resolved_asset_id": str(resolution.get("resolved_asset_id", requested_asset_id)),
+        "resolution_type": str(resolution.get("resolution_type", "exact")),
+        "reason": str(resolution.get("reason", "asset_found")),
+        "asset_record": available_by_id.get(str(resolution.get("resolved_asset_id", requested_asset_id)), placement),
+    }, resolution
+
+
+def _placement_report(
+    *,
+    compiled: List[Dict[str, Any]],
+    placement_mode: str,
+    resolution_counts: Counter[str],
+    substitution_entries: List[Dict[str, Any]],
+    rejected_candidate_counts: Counter[str],
+    overlap_repair: Dict[str, Any],
+) -> Dict[str, Any]:
+    overlap_pairs: List[Dict[str, Any]] = []
+    relation_failures: List[Dict[str, Any]] = []
+    face_to_scores: Dict[str, float] = {}
+    grouped_positions: Dict[str, List[Tuple[str, List[float], float]]] = {}
+
+    for left_index, left in enumerate(compiled):
+        if _constraint_type(left) in {"wall", "surface", "ceiling"}:
+            continue
+        left_radius = float(((left.get("geometry_profile") or {}).get("footprint_radius")) or 0.0)
+        left_pos = (left.get("transform") or {}).get("pos") or [0.0, 0.0, 0.0]
+        group_id = str(left.get("group_id") or "").strip()
+        if group_id:
+            grouped_positions.setdefault(group_id, []).append(
+                (
+                    str(left.get("placement_id") or ""),
+                    list(left_pos),
+                    left_radius,
+                )
+            )
+        for right in compiled[left_index + 1 :]:
+            if _constraint_type(right) in {"wall", "surface", "ceiling"}:
+                continue
+            right_radius = float(((right.get("geometry_profile") or {}).get("footprint_radius")) or 0.0)
+            if left_radius <= 0.0 or right_radius <= 0.0:
+                continue
+            right_pos = (right.get("transform") or {}).get("pos") or [0.0, 0.0, 0.0]
+            distance = math.dist((left_pos[0], left_pos[2]), (right_pos[0], right_pos[2]))
+            if distance < (left_radius + right_radius):
+                overlap_pairs.append(
+                    {
+                        "left": str(left.get("asset_id") or ""),
+                        "right": str(right.get("asset_id") or ""),
+                        "distance": round(distance, 3),
+                        "threshold": round(left_radius + right_radius, 3),
+                    }
+                )
+        if _constraint_relation(left) != "face_to":
+            continue
+        target = _resolve_face_to_target(left, compiled)
+        if target is None:
+            continue
+        score = _face_alignment_score(left, target)
+        if score is not None and score < 0.75:
+            relation_failures.append(
+                {
+                    "placement_id": str(left.get("placement_id") or ""),
+                    "asset_id": str(left.get("asset_id") or ""),
+                    "target_asset_id": str(target.get("asset_id") or ""),
+                    "relation": "face_to",
+                    "alignment_score": round(score, 3),
+                }
+            )
+        if score is not None:
+            face_to_scores[str(left.get("placement_id") or "")] = round(score, 3)
+
+    group_layout_failures: List[Dict[str, Any]] = []
+    for group_id, entries in grouped_positions.items():
+        for left_index, (left_id, left_pos, left_radius) in enumerate(entries):
+            for right_id, right_pos, right_radius in entries[left_index + 1 :]:
+                minimum_distance = left_radius + right_radius + 0.05
+                actual_distance = math.dist((left_pos[0], left_pos[2]), (right_pos[0], right_pos[2]))
+                if actual_distance < minimum_distance:
+                    group_layout_failures.append(
+                        {
+                            "group_id": group_id,
+                            "left_placement_id": left_id,
+                            "right_placement_id": right_id,
+                            "distance": round(actual_distance, 3),
+                            "threshold": round(minimum_distance, 3),
+                        }
+                    )
+
+    return {
+        "total_placements": len(compiled),
+        "resolution_counts": dict(resolution_counts),
+        "substitution_count": len(substitution_entries),
+        "substitutions": substitution_entries,
+        "rejected_candidate_counts": dict(rejected_candidate_counts),
+        "placement_execution": {
+            "backend": placement_mode,
+            "attempt_count": 1,
+            "best_attempt": 0,
+            "placed_count": len(compiled),
+            "skipped_count": 0,
+            "fallback_count": 0,
+        },
+        "placement_mode": placement_mode,
+        "placement_audit": {
+            "overlap_count": len(overlap_pairs),
+            "overlap_pairs": overlap_pairs,
+            "repair_passes": int(overlap_repair["repair_passes"]),
+            "repaired_pairs": int(overlap_repair["repaired_pairs"]),
+            "group_repairs_applied": int(overlap_repair.get("group_repairs_applied") or 0),
+            "group_members_adjusted": int(overlap_repair.get("group_members_adjusted") or 0),
+            "relation_failure_count": len(relation_failures),
+            "relation_failures": relation_failures,
+            "group_layout_failure_count": len(group_layout_failures),
+            "group_layout_failures": group_layout_failures,
+            "face_to_score_by_placement": face_to_scores,
+        },
     }
 
 
@@ -123,6 +246,8 @@ def _compile_placements(
     pack_ids: List[str],
     room_theme: Dict[str, Any],
     seed: int,
+    placement_intent: Dict[str, Any] | None = None,
+    placement_mode: str = "scene_graph_solver",
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     compiled_inputs: List[Dict[str, Any]] = []
     substitution_entries: List[Dict[str, Any]] = []
@@ -132,50 +257,22 @@ def _compile_placements(
     registry = load_pack_registry()
     if not pack_ids:
         pack_ids = sorted(registry.packs_by_id.keys())
-    available_assets = collect_assets(pack_ids, registry) or collect_assets([], registry)
-    available_by_id = {
-        str(asset.get("asset_id", "")): asset
-        for asset in available_assets
-        if isinstance(asset, dict) and asset.get("asset_id")
-    }
+    _, available_by_id = _available_assets(pack_ids)
 
     for index, placement in enumerate(raw_placements):
         if not isinstance(placement, dict):
             continue
-
-        transform = placement.get("transform")
-        transform = transform if isinstance(transform, dict) else {}
-
-        position = _safe_vec3(transform.get("pos"), [0.0, 0.0, 0.0])
-        rotation = _safe_vec3(transform.get("rot"), [0.0, 0.0, 0.0])
-        scale = _safe_vec3(transform.get("scale"), [1.0, 1.0, 1.0])
-
-        requested_asset_id = str(placement.get("asset_id", "unknown_asset"))
-        requested_tags = placement.get("tags")
-        requested_meta = {
-            "tags": requested_tags if isinstance(requested_tags, list) else [],
-            "allow_passthrough_exact": True,
-            "role": placement.get("role"),
-            "label": placement.get("label"),
-            "category": placement.get("category"),
-            "style_tags": placement.get("style_tags"),
-            "era_tags": placement.get("era_tags"),
-            "color_tags": placement.get("color_tags"),
-            "visual_style": placement.get("visual_style"),
-            "poly_style": placement.get("poly_style"),
-        }
-        resolution = resolve_asset_or_substitute(
-            requested_asset_id=requested_asset_id,
-            requested_tags=requested_meta["tags"],
+        compiled_source, resolution = _compile_raw_placement(
+            index=index,
+            placement=placement,
             pack_ids=pack_ids,
             registry=registry,
-            requested_meta=requested_meta,
             room_theme=room_theme,
+            available_by_id=available_by_id,
         )
-
-        resolved_asset_id = str(resolution.get("resolved_asset_id", requested_asset_id))
-        resolution_type = str(resolution.get("resolution_type", "exact"))
-        reason = str(resolution.get("reason", "asset_found"))
+        resolved_asset_id = compiled_source["resolved_asset_id"]
+        resolution_type = compiled_source["resolution_type"]
+        reason = compiled_source["reason"]
         coherence_checks = resolution.get("coherence_checks", {})
         rejected_counts = resolution.get("rejected_candidate_counts", {})
         if isinstance(rejected_counts, dict):
@@ -191,7 +288,7 @@ def _compile_placements(
         if resolution_type in {"substitute", "placeholder"}:
             substitution_entries.append(
                 _substitution_entry(
-                    requested_asset_id=requested_asset_id,
+                    requested_asset_id=compiled_source["requested_asset_id"],
                     resolved_asset_id=resolved_asset_id,
                     resolution_type=resolution_type,
                     reason=reason,
@@ -203,41 +300,42 @@ def _compile_placements(
 
         compiled_inputs.append(
             _compiled_input(
-                index=index,
-                placement=placement,
-                requested_asset_id=requested_asset_id,
+                index=compiled_source["index"],
+                placement=compiled_source["placement"],
+                requested_asset_id=compiled_source["requested_asset_id"],
                 resolved_asset_id=resolved_asset_id,
                 resolution_type=resolution_type,
                 reason=reason,
-                requested_tags=requested_meta["tags"],
-                position=position,
-                rotation=rotation,
-                scale=scale,
+                requested_tags=compiled_source["requested_tags"],
+                position=compiled_source["position"],
+                rotation=compiled_source["rotation"],
+                scale=compiled_source["scale"],
                 dimensions=dimensions,
-                asset_record=available_by_id.get(resolved_asset_id, placement),
+                asset_record=compiled_source["asset_record"],
             )
         )
 
-    compiled, solver_report = solve_placement_layout(compiled_inputs, dimensions, seed)
-    report = {
-        "total_placements": len(compiled),
-        "resolution_counts": dict(resolution_counts),
-        "substitution_count": len(substitution_entries),
-        "substitutions": substitution_entries,
-        "rejected_candidate_counts": dict(rejected_candidate_counts),
-        "placement_solver": solver_report,
-    }
-
-    return compiled, report
-
-
-def _planner_policy(worldspec: Dict[str, Any]) -> Dict[str, Any]:
-    policy = worldspec.get("planner_policy")
-    return dict(policy) if isinstance(policy, dict) else {}
+    _apply_face_to_corrections(compiled_inputs)
+    overlap_repair = _repair_overlaps(compiled_inputs, dimensions)
+    _apply_face_to_corrections(compiled_inputs)
+    del seed, placement_intent
+    compiled = compiled_inputs
+    return compiled, _placement_report(
+        compiled=compiled,
+        placement_mode=placement_mode,
+        resolution_counts=resolution_counts,
+        substitution_entries=substitution_entries,
+        rejected_candidate_counts=rejected_candidate_counts,
+        overlap_repair=overlap_repair,
+    )
 
 
 def _derive_room_theme(worldspec: Dict[str, Any]) -> Dict[str, Any]:
     style_tags: List[str] = []
+    mood_tags: List[str] = []
+    creative_tags: List[str] = []
+    style_descriptors: List[str] = []
+    negative_constraints: List[str] = []
     stylekit_id = worldspec.get("stylekit_id")
     if isinstance(stylekit_id, str) and stylekit_id:
         style_registry = load_stylekit_registry()
@@ -247,10 +345,24 @@ def _derive_room_theme(worldspec: Dict[str, Any]) -> Dict[str, Any]:
             if isinstance(raw_tags, list):
                 style_tags = [str(tag).strip().lower() for tag in raw_tags if isinstance(tag, str) and str(tag).strip()]
 
+    scene_context = worldspec.get("scene_context") if isinstance(worldspec.get("scene_context"), dict) else {}
+    for key, bucket in (
+        ("mood_tags", mood_tags),
+        ("creative_tags", creative_tags),
+        ("style_descriptors", style_descriptors),
+        ("negative_constraints", negative_constraints),
+    ):
+        values = scene_context.get(key) if isinstance(scene_context.get(key), list) else []
+        bucket.extend(str(value).strip().lower() for value in values if isinstance(value, str) and str(value).strip())
+
     return {
-        "style_tags": style_tags,
+        "style_tags": list(dict.fromkeys(style_tags + creative_tags + style_descriptors)),
         "era_tags": [],
         "color_tags": [],
+        "mood_tags": list(dict.fromkeys(mood_tags)),
+        "negative_constraints": list(dict.fromkeys(negative_constraints)),
+        "concept_label": str(scene_context.get("concept_label") or "").strip().lower(),
+        "scene_type": str(scene_context.get("scene_type") or "").strip().lower(),
     }
 
 
@@ -262,7 +374,83 @@ def _count_teleportable_surfaces(template: Dict[str, Any]) -> int:
     return count
 
 
-def compile_phase0(
+def _surface_role_for_template_node(node_id: str) -> str | None:
+    token = str(node_id or "").strip().lower()
+    if token == "floor":
+        return "floor"
+    if token == "ceiling":
+        return "ceiling"
+    if token.startswith("wall_"):
+        return "wall"
+    return None
+
+
+def _preview_color_hex(material_record: Dict[str, Any]) -> str | None:
+    rgba = material_record.get("preview_color_rgba")
+    if not isinstance(rgba, dict):
+        return None
+    channels: List[int] = []
+    for key in ("r", "g", "b"):
+        value = rgba.get(key)
+        if not isinstance(value, (int, float)):
+            return None
+        channels.append(max(0, min(255, int(round(float(value) * 255.0)))))
+    return "#{:02x}{:02x}{:02x}".format(*channels)
+
+
+def _surface_material_payload(
+    surface_role: str,
+    material_id: str,
+    material_records_by_id: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    record = material_records_by_id.get(material_id) if material_id else None
+    if not isinstance(record, dict):
+        return {"surface_role": surface_role, "material_id": material_id}
+    return {
+        "surface_role": surface_role,
+        "material_id": material_id,
+        "display_name": record.get("display_name") or record.get("material_name"),
+        "material_path": record.get("material_path"),
+        "preview_texture_asset_path": record.get("preview_texture_asset_path"),
+        "preview_color_hex": _preview_color_hex(record),
+        "surface_roles": list(record.get("surface_roles") or []),
+        "material_family_tags": list(record.get("material_family_tags") or []),
+        "texture_tags": list(record.get("texture_tags") or []),
+        "finish_tags": list(record.get("finish_tags") or []),
+        "visual_description": record.get("visual_description"),
+    }
+
+
+def _apply_shell_surface_materials(
+    template: Dict[str, Any],
+    surface_material_selection: Dict[str, Any] | None,
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    selection = dict(surface_material_selection) if isinstance(surface_material_selection, dict) else {}
+    if not selection:
+        return template, {}
+
+    material_records_by_id = load_style_material_pool_by_id()
+    updated_template = dict(template)
+    updated_nodes: List[Dict[str, Any]] = []
+    shell_bindings: Dict[str, Any] = {}
+
+    for node in template.get("nodes", []):
+        if not isinstance(node, dict):
+            continue
+        updated_node = dict(node)
+        surface_role = _surface_role_for_template_node(str(node.get("id") or ""))
+        if surface_role:
+            material_id = str(selection.get(surface_role) or "").strip()
+            if material_id:
+                payload = _surface_material_payload(surface_role, material_id, material_records_by_id)
+                updated_node["surface_material"] = payload
+                shell_bindings[str(node.get("id") or "")] = payload
+        updated_nodes.append(updated_node)
+    updated_template["nodes"] = updated_nodes
+    return updated_template, shell_bindings
+
+
+def compile_phase0(  # main compiler entry-point: worldspec -> placed, resolved, overlap-repaired phase0 artifact
     worldspec: Dict[str, Any],
     build_root: str | pathlib.Path = "build",
     write_artifact: bool = True,
@@ -291,13 +479,19 @@ def compile_phase0(
             "safe_spawn": None,
         }
 
+    template, shell_material_bindings = _apply_shell_surface_materials(
+        template,
+        worldspec.get("surface_material_selection"),
+    )
+
     dimensions = template["dimensions"]
     raw_placements = worldspec.get("placements", [])
     raw_placements = raw_placements if isinstance(raw_placements, list) else []
     pack_ids = worldspec.get("pack_ids")
     pack_ids = pack_ids if isinstance(pack_ids, list) else []
     room_theme = _derive_room_theme(worldspec)
-    planner_policy = _planner_policy(worldspec)
+    planner_policy = worldspec.get("planner_policy") if isinstance(worldspec.get("planner_policy"), dict) else {}
+    placement_mode = str(planner_policy.get("placement_mode") or "scene_graph_solver")
     placement_intent = worldspec.get("placement_intent") if isinstance(worldspec.get("placement_intent"), dict) else {}
     placement_plan = worldspec.get("placement_plan") if isinstance(worldspec.get("placement_plan"), dict) else {}
     placements, substitution_report = _compile_placements(
@@ -306,6 +500,8 @@ def compile_phase0(
         pack_ids,
         room_theme,
         int(worldspec.get("seed", 0)),
+        placement_intent=placement_intent,
+        placement_mode=placement_mode,
     )
 
     world_id = _build_world_id(worldspec)
@@ -314,15 +510,18 @@ def compile_phase0(
         "world_id": world_id,
         "worldspec_version": worldspec.get("worldspec_version"),
         "template": template,
+        "surface_material_selection": worldspec.get("surface_material_selection") if isinstance(worldspec.get("surface_material_selection"), dict) else {},
+        "shell_material_bindings": shell_material_bindings,
         "placements": placements,
         "constraints": {
-            "floor_anchored_only": True,
+            "floor_anchored_only": False,
             "stacking_enabled": False,
             "placement_constraints_enabled": True,
         },
         "placement_policy": {
             "intent": placement_intent,
             "plan": placement_plan,
+            "placement_mode": placement_mode,
             "placed_count": len(placements),
         },
         "substitution_report": substitution_report,

@@ -7,6 +7,7 @@ from src.world.validation import validate_worldspec
 FIXTURES_DIR = pathlib.Path(__file__).resolve().parent / "fixtures"
 
 
+# Keep behavior deterministic so planner/runtime contracts stay stable.
 def _load(name: str):
     return json.loads((FIXTURES_DIR / name).read_text(encoding="utf-8"))
 
