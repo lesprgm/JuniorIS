@@ -218,6 +218,9 @@ pythontex-files-*/
 *.ver
 
 # easy-todo
+*.pyc
+__pycache__/
+.DS_Store
 *.lod
 
 # xcolor
@@ -304,6 +307,7 @@ env/
 .env
 .env.local
 .env.*.local
+.scratch/
 
 ## Unity (Quest/Unity project artifacts)
 Library/
@@ -317,3 +321,16 @@ MemoryCaptures/
 
 ## Unity meta (keep these tracked with assets)
 !**/*.meta
+
+## Local/generated backend artifacts
+build_test_tmp/
+tmp/
+models/
+
+##Spec files
+specs/
+resources/
+src/indexing/
+.hidden_harness
+scripts/
+docs/
