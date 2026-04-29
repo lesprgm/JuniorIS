@@ -4,6 +4,7 @@ import math
 from typing import Any, Dict, List, Sequence, Tuple
 
 from src.placement.geometry import derive_near_distance, geometry_profile_from_asset, semantic_role_key
+from src.planning.scene_program_policy import policy_set
 from src.placement.scene_solver_defaults import (
     EDGE_BIASED_ROLES,
     GROUP_CONSTRAINT_DEFAULTS,
@@ -686,7 +687,7 @@ def _best_placement_choice(
             constraint=_constraint_payload(
                 constraint_type,
                 target=target_role,
-                relation=relation_type if relation_type in {"near", "face_to", "align"} else "",
+                relation=relation_type if relation_type in policy_set("near_constraint_relations") else "",
             ),
         )
         if best_choice is None or candidate_score > best_choice[1]:

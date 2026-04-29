@@ -1,0 +1,318 @@
+{
+  "version": 1,
+  "allowed_relations": [
+    "near",
+    "face_to",
+    "align",
+    "far",
+    "edge",
+    "middle",
+    "support_on",
+    "against_wall",
+    "centered_on_wall",
+    "symmetry_with",
+    "avoid"
+  ],
+  "allowed_relation_types": [
+    "proximity",
+    "orientation",
+    "support",
+    "wall_alignment",
+    "symmetry",
+    "avoidance",
+    "room_position"
+  ],
+  "relation_type_defaults": {
+    "near": "proximity",
+    "far": "proximity",
+    "face_to": "orientation",
+    "align": "orientation",
+    "support_on": "support",
+    "against_wall": "wall_alignment",
+    "centered_on_wall": "wall_alignment",
+    "symmetry_with": "symmetry",
+    "avoid": "avoidance",
+    "edge": "room_position",
+    "middle": "room_position"
+  },
+  "allowed_constraint_strengths": [
+    "required",
+    "preferred"
+  ],
+  "allowed_target_surface_types": [
+    "floor",
+    "wall",
+    "surface",
+    "ceiling",
+    "tabletop",
+    "shelf"
+  ],
+  "allowed_density_targets": [
+    "sparse",
+    "normal",
+    "dense",
+    "cluttered"
+  ],
+  "allowed_symmetry_preferences": [
+    "symmetric",
+    "asymmetric",
+    "balanced"
+  ],
+  "allowed_group_types": [
+    "dining_set",
+    "lounge_cluster",
+    "reading_corner",
+    "bedside_cluster",
+    "workstation"
+  ],
+  "allowed_group_layouts": [
+    "paired_long_sides",
+    "ring",
+    "arc",
+    "front_facing_cluster",
+    "beside_anchor"
+  ],
+  "allowed_facing_rules": [
+    "toward_anchor",
+    "toward_focal_object",
+    "parallel",
+    "none"
+  ],
+  "allowed_zone_preferences": [
+    "center",
+    "edge",
+    "corner",
+    "front",
+    "back",
+    "left",
+    "right"
+  ],
+  "allowed_group_importance": [
+    "primary",
+    "secondary",
+    "background"
+  ],
+  "allowed_focal_walls": [
+    "front",
+    "back",
+    "left",
+    "right",
+    "none"
+  ],
+  "allowed_circulation_preferences": [
+    "clear_center",
+    "clear_entry",
+    "balanced",
+    "layered"
+  ],
+  "allowed_empty_space_preferences": [
+    "open_center",
+    "balanced",
+    "layered"
+  ],
+  "allowed_slot_necessities": [
+    "core",
+    "support",
+    "enrichment"
+  ],
+  "allowed_slot_sources": [
+    "explicit_prompt",
+    "inferred_function",
+    "style_enrichment",
+    "deterministic_completion"
+  ],
+  "allowed_optional_placement_hints": [
+    "wall_centered",
+    "wall_left",
+    "wall_right",
+    "wall_above_anchor",
+    "corner_left",
+    "corner_right",
+    "tabletop_center",
+    "tabletop_edge",
+    "ceiling_center",
+    "floor_edge"
+  ],
+  "required_surface_material_slots": [
+    "wall",
+    "floor",
+    "ceiling"
+  ],
+  "allowed_budget_keys": [
+    "max_props",
+    "max_props_hard",
+    "max_floor_objects",
+    "max_wall_objects",
+    "max_surface_objects",
+    "max_texture_tier",
+    "max_lights",
+    "max_clutter_weight"
+  ],
+  "completion_rules": [
+    {
+      "rule_id": "sleep_bedside_support",
+      "when_slot_concepts_any": [
+        "bed"
+      ],
+      "unless_negative_constraints": [
+        "no_bedside",
+        "no_nightstand",
+        "avoid_bedside_support"
+      ],
+      "unless_slot_concepts": [
+        "nightstand"
+      ],
+      "slot": {
+        "slot_id": "bedside_support_1",
+        "concept": "nightstand",
+        "priority": "should",
+        "runtime_role_hint": "table",
+        "rationale": "support sleep anchor with a reachable bedside surface",
+        "capabilities": [
+          "bedside_support",
+          "reachable_surface"
+        ]
+      }
+    },
+    {
+      "rule_id": "sleep_storage_support",
+      "when_slot_concepts_any": [
+        "bed"
+      ],
+      "unless_negative_constraints": [
+        "no_storage",
+        "avoid_storage"
+      ],
+      "unless_slot_concepts": [
+        "dresser"
+      ],
+      "slot": {
+        "slot_id": "sleep_storage_1",
+        "concept": "dresser",
+        "priority": "should",
+        "runtime_role_hint": "cabinet",
+        "rationale": "make the sleeping room feel complete with storage",
+        "capabilities": [
+          "storage_low"
+        ]
+      }
+    },
+    {
+      "rule_id": "work_surface_support",
+      "when_prompt_tokens_any": [
+        "work",
+        "study",
+        "office",
+        "desk"
+      ],
+      "when_slot_concepts_any": [
+        "desk",
+        "work_surface"
+      ],
+      "when_mode": "any",
+      "unless_slot_concepts": [
+        "desk"
+      ],
+      "slot": {
+        "slot_id": "work_surface_1",
+        "concept": "desk",
+        "priority": "should",
+        "runtime_role_hint": "table",
+        "rationale": "cover the room's work function with a primary work surface",
+        "capabilities": [
+          "work_surface"
+        ]
+      }
+    },
+    {
+      "rule_id": "display_lounge_support",
+      "when_prompt_tokens_any": [
+        "museum",
+        "gallery",
+        "display",
+        "exhibit",
+        "lounge"
+      ],
+      "when_slot_concepts_any": [
+        "media_console",
+        "display_surface"
+      ],
+      "when_mode": "any",
+      "unless_slot_concepts": [
+        "display_surface",
+        "media_console",
+        "nightstand",
+        "desk"
+      ],
+      "slot": {
+        "slot_id": "display_support_1",
+        "concept": "display_surface",
+        "priority": "should",
+        "runtime_role_hint": "table",
+        "rationale": "support the focal display or lounge composition with one clear support surface",
+        "capabilities": [
+          "display_support"
+        ]
+      }
+    }
+  ],
+  "adjacency_relations": [
+    "near",
+    "face_to",
+    "align",
+    "far"
+  ],
+  "spatial_position_relations": [
+    "edge",
+    "middle"
+  ],
+  "near_constraint_relations": [
+    "near",
+    "face_to",
+    "align"
+  ],
+  "allowed_anchor_preferences": [
+    "against_wall",
+    "clustered",
+    "reading_nook",
+    "edge",
+    "middle"
+  ],
+  "bright_white_wall_context_tokens": [
+    "gallery",
+    "museum",
+    "clinical",
+    "clinic",
+    "minimal",
+    "minimalist",
+    "bright",
+    "bright_modern",
+    "white"
+  ],
+  "seating_roles": [
+    "chair",
+    "bench",
+    "sofa"
+  ],
+  "edge_biased_roles": [
+    "bed",
+    "sofa",
+    "cabinet",
+    "appliance",
+    "table"
+  ],
+  "group_zone_defaults": {
+    "dining_set": "center",
+    "lounge_cluster": "edge",
+    "reading_corner": "corner",
+    "bedside_cluster": "back",
+    "workstation": "back"
+  },
+  "group_constraint_defaults": {
+    "dining_set": "floor",
+    "lounge_cluster": "against_wall",
+    "reading_corner": "against_wall",
+    "bedside_cluster": "against_wall",
+    "workstation": "against_wall"
+  }
+}

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Dict, List, TypedDict
 
+from src.placement.semantic_taxonomy import supported_runtime_roles
+
 
 # Keep behavior deterministic so planner/runtime contracts stay stable.
 class StyleCueSpec(TypedDict, total=False):
@@ -142,17 +144,4 @@ class SceneProgram(TypedDict, total=False):
     recovery_mode: str
     plausibility_warnings: List[str]
 
-SUPPORTED_SEMANTIC_ROLES = {
-    "appliance",
-    "bed",
-    "bench",
-    "cabinet",
-    "chair",
-    "decor",
-    "lamp",
-    "plant",
-    "sign",
-    "sofa",
-    "table",
-    "tool",
-}
+SUPPORTED_SEMANTIC_ROLES = supported_runtime_roles()
