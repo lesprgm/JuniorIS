@@ -101,6 +101,44 @@ This is a credible source because it is peer-reviewed at NeurIPS 2023, includes 
 For Holodeck, CommonScenes reinforces the value of scene-graph or spec-based planning before compilation. Its evidence suggests that explicit relational conditioning improves scene validity, which aligns with deterministic validation goals such as walkability checks, object compatibility, and predictable regeneration from the same prompt and seed.}
 }
 
+@inproceedings{Tang_2024_CVPR_DiffuScene,
+author = {Tang, Jiapeng and Nie, Yinyu and Markhasin, Lev and Dai, Angela and Thies, Justus and Nie{\ss}ner, Matthias},
+title = {{DiffuScene}: Denoising Diffusion Models for Generative Indoor Scene Synthesis},
+booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+publisher = {IEEE/CVF},
+month = {June},
+year = {2024},
+url = {https://arxiv.org/abs/2303.14207},
+urldate = {2026-04-22},
+annote = {DiffuScene presents a diffusion-based method for indoor 3D scene synthesis that operates over unordered object configurations rather than direct mesh generation. The paper explicitly treats scene completion, scene arrangement, and text-conditioned scene synthesis as downstream capabilities of the same scene-configuration model. This is relevant here not as an implemented method, but as evidence that completion is a meaningful first-class capability in indoor scene generation rather than an ad hoc heuristic.}
+}
+
+@inproceedings{Tam_2026_WACV_SceneEval,
+author = {Tam, Hou In Ivan and Pun, Hou In Derek and Wang, Austin T. and Chang, Angel X. and Savva, Manolis},
+title = {{SceneEval}: Evaluating Semantic Coherence in Text-Conditioned {3D} Indoor Scene Synthesis},
+booktitle = {Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
+publisher = {IEEE/CVF},
+month = {March},
+year = {2026},
+url = {https://arxiv.org/abs/2503.14756},
+urldate = {2026-04-22},
+annote = {SceneEval introduces an evaluation framework for text-conditioned 3D indoor scenes that separates explicit prompt requirements from implicit plausibility expectations such as support, collisions, and navigability. It is relevant here because the project's evaluation and failure analysis also distinguish literal prompt satisfaction from whether a compiled room is actually complete and usable.}
+}
+
+@inproceedings{Zhang_2025_CVPR_OpenFunGraph,
+author = {Zhang, Chenyangguang and Delitzas, Alexandros and Wang, Fangjinhua and Zhang, Ruida and Ji, Xiangyang and Pollefeys, Marc and Engelmann, Francis},
+title = {Open-Vocabulary Functional {3D} Scene Graphs for Real-World Indoor Spaces},
+booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+publisher = {IEEE/CVF},
+month = {June},
+year = {2025},
+pages = {19401--19413},
+doi = {10.1109/CVPR52734.2025.01807},
+url = {https://openaccess.thecvf.com/content/CVPR2025/html/Zhang_Open-Vocabulary_Functional_3D_Scene_Graphs_for_Real-World_Indoor_Spaces_CVPR_2025_paper.html},
+urldate = {2026-04-22},
+annote = {This paper introduces functional 3D scene graphs and the OpenFunGraph pipeline, extending plain object-and-spatial-relation graphs with interactive elements and functional relationships. It is relevant here because the project's scene program now carries semantic slots, support structure, and functional intent beyond a flat object list or purely spatial graph, even though it does not implement OpenFunGraph itself.}
+}
+
 @misc{Khronos_OpenXR_Spec,
 author = {{Khronos Group}},
 title = {{OpenXR} 1.1 Specification},
