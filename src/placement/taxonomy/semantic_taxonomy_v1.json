@@ -1,0 +1,573 @@
+{
+  "version": "semantic_taxonomy_v1",
+  "supported_runtime_roles": [
+    "appliance",
+    "bed",
+    "bench",
+    "cabinet",
+    "chair",
+    "decor",
+    "door",
+    "lamp",
+    "plant",
+    "sign",
+    "sofa",
+    "table",
+    "textile",
+    "tool"
+  ],
+  "role_aliases": {
+    "bedside_table": "table",
+    "bedside_tables": "table",
+    "bookcase": "cabinet",
+    "bookcases": "cabinet",
+    "cabinet_storage": "cabinet",
+    "chairs": "chair",
+    "couch": "sofa",
+    "couches": "sofa",
+    "coffee_table": "table",
+    "coffee_tables": "table",
+    "desk": "table",
+    "desks": "table",
+    "display_cabinet": "cabinet",
+    "display_cabinets": "cabinet",
+    "display_case": "cabinet",
+    "display_cases": "cabinet",
+    "dresser": "cabinet",
+    "dressers": "cabinet",
+    "end_table": "table",
+    "end_tables": "table",
+    "light": "lamp",
+    "lighting": "lamp",
+    "lights": "lamp",
+    "loveseat": "sofa",
+    "loveseats": "sofa",
+    "nightstand": "table",
+    "nightstands": "table",
+    "pedestal": "table",
+    "pedestals": "table",
+    "plinth": "table",
+    "plinths": "table",
+    "seat": "chair",
+    "seats": "chair",
+    "sectional": "sofa",
+    "sectionals": "sofa",
+    "shelf": "cabinet",
+    "shelves": "cabinet",
+    "side_table": "table",
+    "side_tables": "table",
+    "stool": "chair",
+    "stools": "chair",
+    "storage": "cabinet",
+    "tools": "tool",
+    "wardrobe": "cabinet",
+    "wardrobes": "cabinet",
+    "workbench": "table",
+    "workbenches": "table"
+  },
+  "concept_aliases": {
+    "accent_lighting": "floor_lamp",
+    "ambient_lighting": "floor_lamp",
+    "architectural_column": "architectural_column",
+    "art": "wall_art",
+    "artwork": "wall_art",
+    "bedside_surface": "nightstand",
+    "bedside_table": "nightstand",
+    "bookcase": "bookshelf",
+    "bookshelf": "bookshelf",
+    "closet": "wardrobe",
+    "column": "architectural_column",
+    "desk": "desk",
+    "display_console": "media_console",
+    "display_pedestal": "display_surface",
+    "display_plinth": "display_surface",
+    "display_plinth_set": "display_surface",
+    "display_surface": "display_surface",
+    "dramatic_painting": "wall_art",
+    "dresser": "dresser",
+    "floor_lamp": "floor_lamp",
+    "focal_art": "wall_art",
+    "frame": "wall_art",
+    "gallery_graphic": "wall_art",
+    "gallery_graphics": "wall_art",
+    "media_console": "media_console",
+    "mirror": "mirror",
+    "mood_lighting": "floor_lamp",
+    "night_table": "nightstand",
+    "nightstand": "nightstand",
+    "painting": "wall_art",
+    "painting_wall": "wall_art",
+    "pedestal": "display_surface",
+    "pillar": "architectural_column",
+    "plinth": "display_surface",
+    "reading_lamp": "task_lamp",
+    "seat": "chair",
+    "seating": "chair",
+    "shelf": "bookshelf",
+    "side_surface": "display_surface",
+    "side_table": "nightstand",
+    "signage": "wall_art",
+    "sleep_anchor": "bed",
+    "sleep_surface": "bed",
+    "storage": "cabinet",
+    "support_surface": "display_surface",
+    "task_lamp": "task_lamp",
+    "tool_storage": "cabinet",
+    "tv_console": "media_console",
+    "wall_art": "wall_art",
+    "wall_graphic": "wall_art",
+    "wall_graphics": "wall_art",
+    "wardrobe": "wardrobe",
+    "warm_lighting": "floor_lamp",
+    "work_surface": "desk",
+    "writing_surface": "desk"
+  },
+  "concept_grounding": {
+    "architectural_column": {
+      "runtime_role": "decor",
+      "subtype": "architectural_column"
+    },
+    "bookshelf": {
+      "runtime_role": "cabinet",
+      "subtype": "bookshelf"
+    },
+    "desk": {
+      "runtime_role": "table",
+      "subtype": "desk"
+    },
+    "display_surface": {
+      "runtime_role": "table",
+      "subtype": "display_surface"
+    },
+    "dresser": {
+      "runtime_role": "cabinet",
+      "subtype": "dresser"
+    },
+    "floor_lamp": {
+      "runtime_role": "lamp",
+      "subtype": "floor_lamp"
+    },
+    "media_console": {
+      "runtime_role": "cabinet",
+      "subtype": "media_console"
+    },
+    "mirror": {
+      "runtime_role": "decor",
+      "subtype": "mirror"
+    },
+    "nightstand": {
+      "runtime_role": "table",
+      "subtype": "nightstand"
+    },
+    "task_lamp": {
+      "runtime_role": "lamp",
+      "subtype": "task_lamp"
+    },
+    "wall_art": {
+      "runtime_role": "decor",
+      "subtype": "wall_art"
+    },
+    "wardrobe": {
+      "runtime_role": "cabinet",
+      "subtype": "wardrobe"
+    }
+  },
+  "token_grounding_rules": [
+    {
+      "match_any": [
+        "light",
+        "lighting",
+        "fixture",
+        "lamp",
+        "lantern",
+        "sconce"
+      ],
+      "runtime_role": "lamp",
+      "default_subtype": "",
+      "subtype_by_token": {
+        "floor": "floor_lamp",
+        "task": "task_lamp",
+        "reading": "task_lamp",
+        "desk": "task_lamp",
+        "table": "task_lamp"
+      }
+    },
+    {
+      "match_any": [
+        "display",
+        "plinth",
+        "pedestal"
+      ],
+      "runtime_role": "table",
+      "default_subtype": "display_surface"
+    },
+    {
+      "match_any": [
+        "table",
+        "desk",
+        "worktable",
+        "island",
+        "counter",
+        "prep"
+      ],
+      "runtime_role": "table",
+      "default_subtype": "",
+      "subtype_by_token": {
+        "desk": "desk",
+        "worktable": "desk",
+        "prep": "desk",
+        "display": "display_surface",
+        "plinth": "display_surface",
+        "pedestal": "display_surface"
+      }
+    },
+    {
+      "match_any": [
+        "chair",
+        "seat",
+        "seating",
+        "stool",
+        "throne"
+      ],
+      "runtime_role": "chair",
+      "default_subtype": ""
+    },
+    {
+      "match_any": [
+        "cabinet",
+        "cabinetry",
+        "storage",
+        "ledger"
+      ],
+      "runtime_role": "cabinet",
+      "default_subtype": "$token_except_role"
+    },
+    {
+      "match_any": [
+        "fridge",
+        "refrigerator",
+        "stove",
+        "range",
+        "sink",
+        "oven",
+        "cooktop"
+      ],
+      "runtime_role": "appliance",
+      "default_subtype": ""
+    },
+    {
+      "match_all": [
+        "surface"
+      ],
+      "match_any": [
+        "study",
+        "work",
+        "writing",
+        "desk",
+        "table"
+      ],
+      "runtime_role": "table",
+      "default_subtype": "desk"
+    },
+    {
+      "match_any": [
+        "storage",
+        "shelving",
+        "shelf",
+        "cabinet",
+        "locker"
+      ],
+      "runtime_role": "cabinet",
+      "default_subtype": "$token_except_role"
+    },
+    {
+      "match_any": [
+        "decoration",
+        "ornament",
+        "artwork",
+        "art",
+        "frame",
+        "wallart",
+        "mirror",
+        "graphic",
+        "graphics",
+        "banner",
+        "heraldic"
+      ],
+      "runtime_role": "decor",
+      "default_subtype": "",
+      "subtype_by_token": {
+        "artwork": "wall_art",
+        "art": "wall_art",
+        "frame": "wall_art",
+        "wallart": "wall_art",
+        "graphic": "wall_art",
+        "graphics": "wall_art",
+        "banner": "wall_art",
+        "heraldic": "wall_art",
+        "mirror": "mirror"
+      }
+    },
+    {
+      "match_any": [
+        "pillar",
+        "column",
+        "architectural"
+      ],
+      "runtime_role": "decor",
+      "default_subtype": "architectural_column"
+    },
+    {
+      "match_any": [
+        "plant",
+        "greenery",
+        "foliage"
+      ],
+      "runtime_role": "plant",
+      "default_subtype": ""
+    },
+    {
+      "match_any": [
+        "tool",
+        "tools",
+        "equipment"
+      ],
+      "runtime_role": "tool",
+      "default_subtype": ""
+    }
+  ],
+  "semantic_alias_groups": [
+    {
+      "triggers": [
+        "art",
+        "artwork",
+        "painting",
+        "frame",
+        "gallery",
+        "wall_art",
+        "focal_art"
+      ],
+      "aliases": [
+        "wall_art",
+        "focal_art",
+        "painting"
+      ]
+    },
+    {
+      "triggers": [
+        "lamp",
+        "light",
+        "lighting",
+        "floor_lamp",
+        "ambient_lighting",
+        "warm_lighting",
+        "accent_lighting"
+      ],
+      "aliases": [
+        "lamp",
+        "lighting",
+        "warm_lighting",
+        "ambient_lighting",
+        "floor_lamp"
+      ]
+    },
+    {
+      "triggers": [
+        "plant",
+        "greenery",
+        "foliage"
+      ],
+      "aliases": [
+        "plant",
+        "greenery"
+      ]
+    },
+    {
+      "triggers": [
+        "pillar",
+        "column",
+        "architectural_column"
+      ],
+      "aliases": [
+        "architectural_column",
+        "pillar",
+        "column"
+      ]
+    }
+  ],
+  "substitution_families": {
+    "decor": [
+      "plant",
+      "decor",
+      "vase",
+      "frame"
+    ],
+    "light": [
+      "lamp",
+      "light",
+      "spot",
+      "chandelier"
+    ],
+    "seating": [
+      "chair",
+      "stool",
+      "bench",
+      "sofa",
+      "seat"
+    ],
+    "storage": [
+      "shelf",
+      "bookcase",
+      "cabinet",
+      "dresser",
+      "wardrobe"
+    ],
+    "table": [
+      "table",
+      "desk",
+      "counter"
+    ]
+  },
+  "role_match_tokens": {
+    "appliance": [
+      "fridge",
+      "stove",
+      "sink",
+      "toilet",
+      "bathtub",
+      "bathroom",
+      "shower",
+      "vanity",
+      "appliance"
+    ],
+    "bed": [
+      "bed"
+    ],
+    "cabinet": [
+      "cabinet",
+      "dresser",
+      "wardrobe",
+      "shelf",
+      "rack",
+      "locker",
+      "storage"
+    ],
+    "chair": [
+      "chair",
+      "stool",
+      "seat"
+    ],
+    "lamp": [
+      "lamp",
+      "light"
+    ],
+    "sofa": [
+      "sofa",
+      "couch",
+      "loveseat"
+    ],
+    "table": [
+      "table",
+      "desk",
+      "bench"
+    ],
+    "tool": [
+      "tool",
+      "saw",
+      "drill",
+      "clamp",
+      "socket",
+      "benchgrinder"
+    ]
+  },
+  "decor": {
+    "kinds": [
+      "frame",
+      "plant",
+      "stack"
+    ],
+    "allowed_anchors": [
+      "wall",
+      "corner",
+      "perimeter",
+      "center"
+    ],
+    "anchor_aliases": {
+      "focal_wall": "wall",
+      "focus_wall": "wall",
+      "perimeter_edge": "perimeter",
+      "wall_centered": "wall",
+      "wall_left": "wall",
+      "wall_right": "wall"
+    },
+    "kind_rules": {
+      "plant": {
+        "roles": [
+          "plant"
+        ],
+        "usable_roles": [
+          "plant"
+        ]
+      },
+      "frame": {
+        "allowed_anchors": [
+          "wall"
+        ],
+        "placement_modes": [
+          "wall_hung"
+        ],
+        "usable_roles": [
+          "wall_accent",
+          "focal_art"
+        ]
+      },
+      "stack": {
+        "support_surface_types": [
+          "surface",
+          "shelf",
+          "tabletop"
+        ],
+        "usable_roles": [
+          "stack",
+          "book",
+          "book_stack"
+        ]
+      }
+    }
+  },
+  "scene_policies": {
+    "bathroom_assets": {
+      "asset_tokens": [
+        "bathroom",
+        "vanity",
+        "sink",
+        "shower",
+        "toilet",
+        "bathtub",
+        "bath"
+      ],
+      "allow_scene_tokens": [
+        "bathroom",
+        "bath",
+        "vanity",
+        "washroom",
+        "powder",
+        "ensuite",
+        "sink",
+        "shower",
+        "toilet"
+      ],
+      "negative_tokens": [
+        "no_bathroom",
+        "avoid_bathroom"
+      ],
+      "disallow_slot_tokens": [
+        "dresser",
+        "wardrobe",
+        "bookshelf",
+        "media_console",
+        "cabinet"
+      ]
+    }
+  }
+}

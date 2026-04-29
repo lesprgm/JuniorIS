@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List
 
+from src.planning.scene_program_policy import policy_set
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]  # climb from src/catalog/ to project root
 DEFAULT_POOL_PATH = PROJECT_ROOT / "data" / "index" / "style_material_pool_v1.json"  # pre-built material pool keyed by surface
@@ -127,18 +129,7 @@ def _allow_bright_white_walls(scene_program: Dict[str, Any] | None) -> bool:
     tokens.update(_scene_style_tags(scene_program))
     tokens.update(_scene_color_tags(scene_program))
     tokens.update(_normalize_tags(scene_program.get("mood_tags")))
-    explicit_white_context = {
-        "gallery",
-        "museum",
-        "clinical",
-        "clinic",
-        "minimal",
-        "minimalist",
-        "bright",
-        "bright_modern",
-        "white",
-    }
-    return bool(tokens & explicit_white_context)
+    return bool(tokens & policy_set("bright_white_wall_context_tokens"))
 
 
 def _wall_washout_penalty(record: Dict[str, Any], scene_program: Dict[str, Any] | None) -> int:

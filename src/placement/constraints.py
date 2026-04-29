@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Tuple
 
+from src.planning.scene_program_policy import policy_set
+
 import numpy as np
 from scipy.stats import qmc
 
@@ -20,7 +22,7 @@ def _safe_text(value: Any) -> str:
 def normalize_anchor_preferences(values: Any) -> List[str]:  # validates and deduplicates anchor preference tokens from LLM output
     if not isinstance(values, list):
         return []
-    allowed = {"against_wall", "clustered", "reading_nook", "edge", "middle"}
+    allowed = policy_set("allowed_anchor_preferences")
     seen: List[str] = []
     for value in values:
         if not isinstance(value, str):
@@ -149,7 +151,7 @@ def default_constraint_for_role(  # infers the placement constraint type (floor/
             continue
         relation = _safe_text(pair.get("relation") or "near")
         target_role = _safe_text(pair.get("target_role"))
-        if target_role in selected and relation in {"near", "face_to", "align"}:
+        if target_role in selected and relation in policy_set("near_constraint_relations"):
             return {"type": "near", "target": target_role, "relation": relation}
 
     anchor_preferences = set(normalize_anchor_preferences(placement_intent.get("anchor_preferences")))

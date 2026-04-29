@@ -5,8 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_TAXONOMY_PATH = PROJECT_ROOT / "data" / "taxonomy" / "semantic_taxonomy_v1.json"
+DEFAULT_TAXONOMY_PATH = Path(__file__).resolve().parent / "taxonomy" / "semantic_taxonomy_v1.json"
 
 
 def _normalize_token(value: Any) -> str:
