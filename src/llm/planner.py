@@ -202,12 +202,15 @@ def request_llm_intent(  # stage 1: asks the LLM to interpret the prompt into a 
         "`placement_intent` must include density_profile:'minimal|normal|cluttered', anchor_preferences:string[], "
         "adjacency_pairs:{source_role:string,target_role:string,relation:'near|face_to|align|far'}[], "
         "spatial_preferences:{role:string,relation:'edge|middle'}[], layout_mood:'open|cozy|crowded'. "
+        "DENSITY GUIDANCE: Default to density_profile 'normal' for most rooms. Use 'minimal' ONLY when the user explicitly requests a minimalist, empty, or sparse aesthetic. Most bedrooms, studies, and living rooms are 'normal'. Use 'cluttered' only when the user asks for a busy, packed, or maximalist space. "
         "Infer ordinary furniture counts, groups, anchors, and facing rules automatically from simple prompts. "
         "For example, 'dining room with 4 chairs and a table' must infer one dining_set group, table as anchor, four chairs as members, and chairs facing the table. The relation_graph should include typed edges like near/proximity, face_to/orientation, and middle/room_position rather than a vague flat list. "
         "Repeated furniture should read as one set unless the user explicitly asks for mixing. "
         "Use groups to capture the room's main composition, not just raw object counts. "
         "If there is a main use-case, make the primary group legible before adding secondary support objects. "
         "For archetypal prompts like bedroom, kitchen, reading room, museum room, gallery, throne room, archive, greenhouse, and lounge, infer a semantically complete room program rather than the minimum object list. Cover the main anchor, one or two essential support moments, and only then optional accents. "
+        "DISTRIBUTION GUIDANCE: Do not crowd all furniture into one corner. Use groups and relation_graph to spread functional moments across the room (e.g., bed on one side, desk/seating on the other). If the user asks for multiple zones, represent them as distinct groups with distinct zone_preferences. "
+        "CHAIR GUIDANCE: Chairs must ALWAYS face the table or anchor they are grouped with. Use facing_rule='toward_anchor' for dining_set and lounge_cluster. In the relation_graph, use 'face_to' between chair and table with 'required' strength. "
         "Do not overpromote fragile enrichments into must slots. A prompt should succeed with a small set of robust must slots and a richer layer of should/optional support. "
         "Let the model own the creative interpretation and semantic judgment. The primary anchor, support hierarchy, groups, relation graph, density, symmetry, walkway intent, optional-addition policy, and creative scene framing must come from the model, not from fallback rules. "
         f"{intent_few_shots}"
@@ -300,7 +303,9 @@ def request_llm_selection(  # stage 2: asks the LLM to select assets, stylekit, 
         "Let the model choose one approved stylekit and one coherent shell material selection for wall, floor, and ceiling. Accent material is optional. Do not rely on fallback stylekit selection. "
         f"{selection_few_shots}"
         "Mini-example: if the scene_program says focal_wall='front' and prefer_wall_accents=true, a valid optional addition is a single frame with anchor='wall' and placement_hint='wall_centered'. If a specific reviewed frame asset is clearly appropriate, also emit decor_plan.entries:[{asset_id:'that_frame',kind:'frame',anchor:'wall',zone_id:'focal_wall',count:1,placement_hint:'wall_centered'}]. "
-        "Decor is optional. If the room does not need extra decor, return an empty decor_plan entries list."
+        "DECOR GUIDANCE: Every room should include at least one wall accent (frame, sign, art) or one surface accent (plant, small prop) unless the user explicitly requests a bare or empty aesthetic. A room with only floor furniture looks unfinished and sterile. Prefer 1-2 tasteful accents that reinforce the room concept over leaving the room completely bare. "
+        "ORIENTATION GUIDANCE: Chairs must face the table. If a chair is part of a dining_set or lounge_cluster, its yaw must be calculated relative to the anchor (table). In your slot_asset_map, do not override this semantic intent with random rotations. "
+        "TEXTILE GUIDANCE: Pillows, cushions, and towels must ONLY be placed as surface-anchored optional additions (anchor='surface'). Never place pillows or towels directly on the floor. Only carpets and rugs belong on the floor. "
     )
     result = adapter.request_json(
         settings=settings,

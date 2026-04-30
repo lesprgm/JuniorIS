@@ -89,6 +89,16 @@ def _compiled_transform(
     }
 
 
+def _apply_vertical_origin_offset(transform: Dict[str, List[float]], asset_record: Dict[str, Any]) -> None:
+    offset = asset_record.get("vertical_origin_offset_meters")
+    if not isinstance(offset, (int, float)) or float(offset) == 0.0:
+        return
+    pos = transform.get("pos")
+    if not isinstance(pos, list) or len(pos) != 3:
+        return
+    pos[1] = round(float(pos[1]) + float(offset), 3)
+
+
 def _bounds_height_meters(asset_record: Dict[str, Any]) -> float | None:
     bounds = asset_record.get("bounds") if isinstance(asset_record.get("bounds"), dict) else None
     size = bounds.get("size") if isinstance(bounds, dict) and isinstance(bounds.get("size"), dict) else None
@@ -227,7 +237,7 @@ def _push_apart(
     unit_z = delta_z / current_distance
     return [
         anchor_pos[0] + (unit_x * min_distance),
-        0.0,
+        float(moving_pos[1]),
         anchor_pos[2] + (unit_z * min_distance),
     ]
 
@@ -290,7 +300,11 @@ def _repair_overlaps(compiled_inputs: List[Dict[str, Any]], dimensions: Dict[str
                     moving_pos=moving_position,
                     min_distance=minimum_distance,
                 )
-                moving_transform["pos"] = _clamp_floor_position(repaired_position, dimensions)
+                clamped_position = _clamp_floor_position(repaired_position, dimensions)
+                offset = moving.get("vertical_origin_offset_meters")
+                if isinstance(offset, (int, float)) and float(offset) != 0.0:
+                    clamped_position[1] = round(float(repaired_position[1]), 3)
+                moving_transform["pos"] = clamped_position
                 repaired_pairs += 1
                 changed = True
 
@@ -330,6 +344,15 @@ def _compiled_input(  # joins final geometric clamping with the substitution pro
     geometry_profile = geometry_profile_from_asset(asset_record, scale=normalized_scale)
     if not geometry_profile and isinstance(placement.get("geometry_profile"), dict):
         geometry_profile = dict(placement["geometry_profile"])
+    vertical_origin_offset = float(asset_record.get("vertical_origin_offset_meters") or 0.0)
+    transform = _compiled_transform(
+        position,
+        rotation,
+        normalized_scale,
+        dimensions,
+        constraint_type=_constraint_type(placement),
+    )
+    _apply_vertical_origin_offset(transform, asset_record)
     return {
         "placement_id": f"placement_{index:03d}",
         "asset_id": resolved_asset_id,
@@ -349,11 +372,6 @@ def _compiled_input(  # joins final geometric clamping with the substitution pro
             or 0.0
         ),
         "geometry_profile": geometry_profile,
-        "transform": _compiled_transform(
-            position,
-            rotation,
-            normalized_scale,
-            dimensions,
-            constraint_type=_constraint_type(placement),
-        ),
+        "vertical_origin_offset_meters": vertical_origin_offset,
+        "transform": transform,
     }

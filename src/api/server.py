@@ -293,14 +293,26 @@ def _validated_request(
             "$.prompt_text",
             "prompt_text must be a non-empty string",
         )
-    if optional_seed is not None and (isinstance(optional_seed, bool) or not isinstance(optional_seed, int)):
-        return _invalid_request_error(
-            request_id,
-            trace_id,
-            "Seed must be an integer.",
-            "$.optional_seed",
-            "optional_seed must be an integer",
-        )
+    if optional_seed is not None:
+        if isinstance(optional_seed, bool):
+             return _invalid_request_error(
+                request_id,
+                trace_id,
+                "Seed must be an integer.",
+                "$.optional_seed",
+                "optional_seed must be an integer",
+            )
+        try:
+            # handle case where client sends seed as float (e.g. 7.0)
+            optional_seed = int(float(optional_seed))
+        except (TypeError, ValueError):
+            return _invalid_request_error(
+                request_id,
+                trace_id,
+                "Seed must be an integer.",
+                "$.optional_seed",
+                "optional_seed must be an integer",
+            )
     if optional_seed is not None and (optional_seed < 0 or optional_seed > 2_147_483_647):
         return _invalid_request_error(
             request_id,
@@ -486,8 +498,8 @@ except ImportError:  # pragma: no cover - optional dependency for API serving
 if FastAPI is not None:
     class PlanAndCompileRequest(BaseModel):
         prompt_text: str
-        optional_seed: Optional[int] = None
-        user_prefs: Dict[str, Any] = Field(default_factory=dict)
+        optional_seed: Optional[Any] = None
+        user_prefs: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
     class VoiceChatterPlanRequest(BaseModel):
         prompt_text: str
@@ -514,6 +526,31 @@ if FastAPI is not None:
             "api_contract_version": API_CONTRACT_VERSION,
             "build_root": str(BUILD_ROOT),
         }
+
+    @app.exception_handler(Exception)
+    async def universal_exception_handler(request, exc):
+        import traceback
+        print(f"ERROR: Unhandled exception in {request.url.path}: {exc}")
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error_code": "internal_error", "message": "An unexpected server error occurred."},
+        )
+
+    from fastapi.exceptions import RequestValidationError
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request, exc):
+        print(f"ERROR: 422 Unprocessable Entity in {request.url.path}")
+        print(f"  Errors: {exc.errors()}")
+        try:
+            body = await request.body()
+            print(f"  Body: {body.decode('utf-8')}")
+        except:
+            print("  Body: <unreadable>")
+        return JSONResponse(
+            status_code=422,
+            content={"ok": False, "error_code": "invalid_request", "message": "The request payload was invalid.", "details": exc.errors()},
+        )
 
     @app.post("/plan_and_compile")  # main endpoint: turns a prompt into a playable world
     def plan_and_compile(payload: PlanAndCompileRequest):

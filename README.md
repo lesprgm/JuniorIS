@@ -1,13 +1,47 @@
 # VR-First Prompt-to-Walkable World System (Holodeck)
 This project explores a VR-first workflow for turning a natural language prompt into a walkable, explorable 3D environment. The user starts in a stable Creation Room, submits a prompt (voice or text), and enters the generated destination world through a portal once the world meets a minimum playability threshold. The runtime is Unity (Quest-native) with OpenXR and C# scripts; the backend handles scene-program planning, validation, and compilation. The current system emphasizes deterministic single-room compilation from a controlled asset/template library: the backend produces a validated room shell, relation-aware placements, scene context, and decor directives before Unity realizes the destination room.
 
+## Quick start
+
+```bash
+git clone <repo-url>
+cd JuniorIS
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+Then edit `.env` with your OpenRouter key and planner model.
+
+To verify the backend:
+
+```bash
+pytest -q tests/test_plan_compile_integration.py
+python3 scripts/tmp_live_engine_smoke.py \
+  --prompt "Build a cozy reading room with a chair, a small table, and a lamp" \
+  --require-llm
+```
+
+## Repository structure
+
+- `src/api/` — backend API and request orchestration
+- `src/planning/` — semantic planning, asset selection, and WorldSpec creation
+- `src/llm/` — LLM planner adapter and structured planning contracts
+- `src/placement/` — relation-aware deterministic placement solver
+- `src/compilation/` — phase0 compiler and runtime artifact generation
+- `src/runtime/` — safe spawn, manifest support, and realization registry
+- `src/indexing/` — asset/material indexing and review pipeline
+- `tests/` — regression tests for schemas, planner, compiler, API, and runtime contracts
+- `scripts/` — smoke tests, review tools, and demo utilities
+
 ## LLM planner setup
 
 1. Copy `.env.example` to `.env` (or edit the generated `.env` file).
 2. Configure the planner LLM provider:
    - `PLANNER_LLM_PROVIDER=openrouter`
    - `OPEN_ROUTER_KEY=...`
-   - `OPEN_ROUTER_MODEL=openai/gpt-5.4-mini`
+   - `OPEN_ROUTER_MODEL=openai/gpt-5.4`
 3. Optional reliability tuning:
    - `PLANNER_LLM_TIMEOUT_S`
    - `PLANNER_LLM_RETRIES`

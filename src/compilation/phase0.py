@@ -37,6 +37,26 @@ def _build_world_id(worldspec: Dict[str, Any]) -> str:
     return f"world_{digest[:10]}"
 
 
+def _compile_failure(
+    *,
+    world_id: str | None,
+    errors: List[Dict[str, Any]],
+    teleportable_surfaces: int = 0,
+    phase0_data: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    result = {
+        "ok": False,
+        "world_id": world_id,
+        "phase0_artifact": None,
+        "teleportable_surfaces": teleportable_surfaces,
+        "errors": errors,
+        "safe_spawn": None,
+    }
+    if phase0_data is not None:
+        result["phase0_data"] = phase0_data
+    return result
+
+
 @lru_cache(maxsize=1)
 def _approved_planner_asset_ids() -> frozenset[str]:  # quick check lookup to prevent malicious or non-indexed assets from slipping past LLM validation
     return frozenset(
@@ -137,7 +157,7 @@ def _placement_report(
     rejected_candidate_counts: Counter[str],
     overlap_repair: Dict[str, Any],
 ) -> Dict[str, Any]:
-    overlap_pairs: List[Dict[str, Any]] = []
+    overlap_pairs = _floor_overlap_pairs(compiled)
     relation_failures: List[Dict[str, Any]] = []
     face_to_scores: Dict[str, float] = {}
     grouped_positions: Dict[str, List[Tuple[str, List[float], float]]] = {}
@@ -156,23 +176,6 @@ def _placement_report(
                     left_radius,
                 )
             )
-        for right in compiled[left_index + 1 :]:
-            if _constraint_type(right) in {"wall", "surface", "ceiling"}:
-                continue
-            right_radius = float(((right.get("geometry_profile") or {}).get("footprint_radius")) or 0.0)
-            if left_radius <= 0.0 or right_radius <= 0.0:
-                continue
-            right_pos = (right.get("transform") or {}).get("pos") or [0.0, 0.0, 0.0]
-            distance = math.dist((left_pos[0], left_pos[2]), (right_pos[0], right_pos[2]))
-            if distance < (left_radius + right_radius):
-                overlap_pairs.append(
-                    {
-                        "left": str(left.get("asset_id") or ""),
-                        "right": str(right.get("asset_id") or ""),
-                        "distance": round(distance, 3),
-                        "threshold": round(left_radius + right_radius, 3),
-                    }
-                )
         if _constraint_relation(left) != "face_to":
             continue
         target = _resolve_face_to_target(left, compiled)
@@ -238,6 +241,69 @@ def _placement_report(
             "face_to_score_by_placement": face_to_scores,
         },
     }
+
+
+def _floor_overlap_pairs(compiled: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    pairs: List[Dict[str, Any]] = []
+    for left_index, left in enumerate(compiled):
+        if _constraint_type(left) in {"wall", "surface", "ceiling"}:
+            continue
+        left_radius = float(((left.get("geometry_profile") or {}).get("footprint_radius")) or 0.0)
+        left_pos = (left.get("transform") or {}).get("pos") or [0.0, 0.0, 0.0]
+        if left_radius <= 0.0:
+            continue
+        for right in compiled[left_index + 1 :]:
+            if _constraint_type(right) in {"wall", "surface", "ceiling"}:
+                continue
+            right_radius = float(((right.get("geometry_profile") or {}).get("footprint_radius")) or 0.0)
+            if right_radius <= 0.0:
+                continue
+            right_pos = (right.get("transform") or {}).get("pos") or [0.0, 0.0, 0.0]
+            distance = math.dist((left_pos[0], left_pos[2]), (right_pos[0], right_pos[2]))
+            if distance < (left_radius + right_radius):
+                pairs.append(
+                    {
+                        "left": str(left.get("asset_id") or ""),
+                        "right": str(right.get("asset_id") or ""),
+                        "left_placement_id": str(left.get("placement_id") or ""),
+                        "right_placement_id": str(right.get("placement_id") or ""),
+                        "distance": round(distance, 3),
+                        "threshold": round(left_radius + right_radius, 3),
+                    }
+                )
+    return pairs
+
+
+def _overlap_trim_priority(placement: Dict[str, Any]) -> int:
+    placement_id = str(placement.get("placement_id") or "")
+    role = str(placement.get("role") or "").strip().lower()
+    if placement_id.startswith("optional_"):
+        return 0
+    if role in {"decor", "plant", "textile"}:
+        return 1
+    return 99
+
+
+def _trim_residual_overlap_clutter(compiled: List[Dict[str, Any]], dimensions: Dict[str, float]) -> Dict[str, Any]:
+    aggregate_repair = {"repair_passes": 0, "repaired_pairs": 0, "group_repairs_applied": 0, "group_members_adjusted": 0}
+    for _ in range(8):
+        pairs = _floor_overlap_pairs(compiled)
+        candidate_ids = {pid for pair in pairs for pid in (pair["left_placement_id"], pair["right_placement_id"])}
+        candidates = [
+            placement for placement in compiled
+            if str(placement.get("placement_id") or "") in candidate_ids and _overlap_trim_priority(placement) < 99
+        ]
+        if not pairs or not candidates:
+            break
+        victim = min(candidates, key=lambda placement: (
+            _overlap_trim_priority(placement),
+            -sum(str(placement.get("placement_id") or "") in {pair["left_placement_id"], pair["right_placement_id"]} for pair in pairs),
+        ))
+        compiled.remove(victim)
+        repair = _repair_overlaps(compiled, dimensions)
+        for key in aggregate_repair:
+            aggregate_repair[key] += int(repair.get(key) or 0)
+    return aggregate_repair
 
 
 def _compile_placements(
@@ -317,6 +383,9 @@ def _compile_placements(
 
     _apply_face_to_corrections(compiled_inputs)
     overlap_repair = _repair_overlaps(compiled_inputs, dimensions)
+    trim_repair = _trim_residual_overlap_clutter(compiled_inputs, dimensions)
+    for key in ("repair_passes", "repaired_pairs", "group_repairs_applied", "group_members_adjusted"):
+        overlap_repair[key] = int(overlap_repair.get(key) or 0) + int(trim_repair.get(key) or 0)
     _apply_face_to_corrections(compiled_inputs)
     del seed, placement_intent
     compiled = compiled_inputs
@@ -457,27 +526,13 @@ def compile_phase0(  # main compiler entry-point: worldspec -> placed, resolved,
 ) -> Dict[str, Any]:
     validation = validate_worldspec(worldspec)
     if not validation["ok"]:
-        return {
-            "ok": False,
-            "world_id": None,
-            "phase0_artifact": None,
-            "teleportable_surfaces": 0,
-            "errors": validation["errors"],
-            "safe_spawn": None,
-        }
+        return _compile_failure(world_id=None, errors=validation["errors"])
 
     template_id = str(worldspec.get("template_id", ""))
     try:
         template = build_template_geometry(template_id)
     except ValueError as exc:
-        return {
-            "ok": False,
-            "world_id": None,
-            "phase0_artifact": None,
-            "teleportable_surfaces": 0,
-            "errors": [{"path": "$.template_id", "message": str(exc)}],
-            "safe_spawn": None,
-        }
+        return _compile_failure(world_id=None, errors=[{"path": "$.template_id", "message": str(exc)}])
 
     template, shell_material_bindings = _apply_shell_surface_materials(
         template,
@@ -527,22 +582,31 @@ def compile_phase0(  # main compiler entry-point: worldspec -> placed, resolved,
         "substitution_report": substitution_report,
     }
 
-    spawn_result = find_safe_spawn(phase0_data)
-    if not spawn_result["ok"]:
-        return {
-            "ok": False,
-            "world_id": world_id,
-            "phase0_artifact": None,
-            "teleportable_surfaces": _count_teleportable_surfaces(template),
-            "errors": [
+    overlap_count = int(
+        ((substitution_report.get("placement_audit") or {}).get("overlap_count"))
+        or 0
+    )
+    if overlap_count > 0:
+        return _compile_failure(
+            world_id=world_id,
+            teleportable_surfaces=_count_teleportable_surfaces(template),
+            errors=[
                 {
-                    "path": "$.safe_spawn",
-                    "message": spawn_result["reason"],
+                    "path": "$.placements",
+                    "message": "Unresolved floor-object overlaps remain after placement repair.",
                 }
             ],
-            "phase0_data": phase0_data,
-            "safe_spawn": None,
-        }
+            phase0_data=phase0_data,
+        )
+
+    spawn_result = find_safe_spawn(phase0_data)
+    if not spawn_result["ok"]:
+        return _compile_failure(
+            world_id=world_id,
+            teleportable_surfaces=_count_teleportable_surfaces(template),
+            errors=[{"path": "$.safe_spawn", "message": spawn_result["reason"]}],
+            phase0_data=phase0_data,
+        )
 
     phase0_data["safe_spawn"] = spawn_result["spawn"]
     phase0_data["safe_spawn_meta"] = {

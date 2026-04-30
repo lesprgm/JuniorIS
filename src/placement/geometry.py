@@ -236,17 +236,17 @@ def room_capacity_summary(  # estimates how many objects the room can hold based
         effective_areas.append(max((2.0 * (radius + clearance + padding)) ** 2, 0.5))
     average_footprint_area = sum(effective_areas) / max(len(effective_areas), 1)
     density_multiplier = DENSITY_MULTIPLIERS[density_profile]
-    raw_capacity = int(math.floor((room_area / max(average_footprint_area, 0.5)) * density_multiplier * BASE_CAPACITY_SCALE))
+    # We no longer apply density_multiplier to capacity, nor fill_ratio to target_budget.
+    # The LLM's max_props and the room's raw physical floor space are the only constraints.
+    raw_capacity = int(math.floor((room_area / max(average_footprint_area, 0.5)) * BASE_CAPACITY_SCALE))
     derived_capacity = max(1, raw_capacity)
-    fill_ratio = DENSITY_BUDGET_FILL[density_profile]
-    target_budget = max(1, int(round(max_props * fill_ratio))) if max_props > 0 else available_count
-    target_count = min(available_count, max_props, derived_capacity, target_budget)
+    target_count = min(available_count, max_props if max_props > 0 else available_count, derived_capacity)
     return {
         "room_area": round(room_area, 3),
         "average_footprint_area": round(average_footprint_area, 3),
         "density_profile": density_profile,
         "density_multiplier": density_multiplier,
         "derived_capacity": derived_capacity,
-        "budget_fill_ratio": fill_ratio,
+        "budget_fill_ratio": 1.0,
         "target_count": max(1, target_count),
     }
