@@ -16,8 +16,26 @@
 
 \maketitle
 
+\begin{abstract}
+This paper describes Holodeck, a system that lets users build and walk through 3D worlds just by describing them. While it is now possible to generate 3D content from text, it is still hard to make those worlds safe and playable on a VR headset like the Meta Quest. Holodeck solves this by breaking the process into two clear steps: planning and compilation. First, a Large Language Model (LLM) acts as a planner, turning a user's prompt into a structured intermediate representation called \texttt{WorldSpec}. Then, a deterministic compiler takes that representation and builds the actual room, making sure every object fits and that there is a safe place for the user to stand. To keep things fast, the system builds a simple greybox version of the room first, so the user can start exploring while the detailed assets finish loading. We tested the system with a variety of natural prompts and found that it consistently produced safe, walkable worlds with no errors in the player spawn logic. Our results show that by separating semantic planning from technical building, we can create reliable, prompt-driven worlds that work smoothly in live VR.
+\end{abstract}
+
+\newpage
+\tableofcontents
+\newpage
+
+\section*{Statement on AI Usage}
+This project utilized artificial intelligence tools in the development of the software system and its supporting infrastructure, though the vast majority of the codebase remains human-generated.
+
+\subsection*{AI as a Core System Component}
+The Holodeck system relies on Large Language Models (LLMs), including \texttt{openai/gpt-5.4} and Google Gemini models, as active architectural components. These models are responsible for the semantic planning stage, interpreting natural language prompts into a structured intermediate representation (\texttt{WorldSpec}). They also assisted in the metadata enrichment of the asset library during the indexing phase, providing initial semantic tags and orientation hints for 3D prefabs. To prevent model hallucinations and ensure semantic grounding, the resulting metadata and its integration across the pipeline were manually reviewed and corrected by the author more than 30 times.
+
+\subsection*{AI in Development and Testing}
+While the core architecture, placement logic, and compilation engine are human-generated, artificial intelligence assistants were utilized for specific development tasks. LLMs were used to assist in the drafting of supporting implementation artifacts, such as taxonomy files and scene-program policies, as well as the generation of specific portions of the project's regression test suite. All AI-assisted segments were subject to rigorous manual refinement to ensure technical accuracy and system integrity.
+\newpage
+
 \section{Introduction}
-Science fiction has always been reliable at predicting what we want before we know how to build it. The communicator from Star Trek became the first commercial flip phone. The tablet computer from 2001: A Space Odyssey became the iPad. These weren’t coincidences. They were the same human desire, expressed first in story, then in silicon.
+Science fiction has always been reliable at predicting what we want before we know how to build it. The communicator from Star Trek became the first commercial flip phone. The tablet computer from 2001: A Space Odyssey became the iPad. They were the same human desire, expressed first in story, then in silicon.
 
 Of all the technologies science fiction imagined, the Holodeck stuck around the longest without a real answer. A user walked in, described a world, and the system built one around them. No menus, no asset browsers, no friction between imagination and experience. It felt further away than flying cars because the problem it was solving was harder to name. The hardware was the easier problem to solve. Understanding what a person meant, building something coherent from it, and delivering it before the moment of anticipation turned into waiting was the actual problem.
 That sequence of steps is deceptively demanding. A user speaks a sentence. The system interprets intent, selects a layout, furnishes it with appropriate objects, themes it correctly, and verifies that every surface is safe to walk on. In VR specifically, all of that has to work before the user takes a single step. The system earns the experience before it offers it.
@@ -88,7 +106,7 @@ The approved asset pipeline addresses this by separating two different questions
 \subsubsection{Indexing, Metadata Enrichment, and Review}
 The indexing stage turned the raw Unity repository into something the planner could actually trust. Prefabs were scanned, thumbnails were captured, and AI-assisted metadata passes extracted candidate labels, affordances, scale hints, front-axis information, and other semantic tags from names, geometry summaries, and preview images. Those model-generated labels were useful for throughput, but they were not treated as authoritative. They existed to accelerate curation, not to replace it.
 
-Human review was still the deciding step. Assets were moved through repeated review passes, corrected when the AI-derived labels were wrong or too broad, and only then approved into the planner-safe inventory. In total, more than 1{,}000 assets were manually reviewed across multiple passes before they were allowed into the approved pool. That review process mattered because weak metadata did not stay confined to a spreadsheet. It directly affected selection quality, placement quality, and runtime plausibility.
+Human review was still the deciding step. Assets were moved through repeated review passes---numbering more than 30 full-pipeline reviews---corrected when the AI-derived labels were wrong or too broad, and only then approved into the planner-safe inventory. In total, more than 1{,}000 assets were manually reviewed to ensure no hallucinations entered the grounded generation stage. That review process mattered because weak metadata did not stay confined to a spreadsheet. It directly affected selection quality, placement quality, and runtime plausibility.
 
 Direction-aware seating metadata is a good example. Earlier metadata passes knew that an object was a chair, but not which side of the prefab was visually the front. That meant a room could satisfy the relation graph numerically while still looking wrong because the chair's back faced the table. Adding explicit front-axis metadata during indexing, then carrying it into compilation, made those scenes read much more naturally.
 
@@ -205,8 +223,37 @@ My research question is whether a prompt-driven system can convert natural langu
 \subsection{Data, Tools, and Systems}
 The system uses manually reviewed asset packs, stylekit manifests, WorldSpec and manifest JSON contracts, and compiled phase0 artifacts as its primary data sources. The implementation uses Unity with C\# and OpenXR on the client side, and Python modules for planning, validation, substitution, safe-spawn search, decor planning, runtime realization, and compilation on the backend, with language models handling design-brief generation, semantic planning, and approved-asset selection. On the backend, geometry-aware parts of the pipeline rely on standard scientific and spatial libraries such as NumPy, SciPy, and Shapely for profiling, sampling, auditing, and validation. Backend-generated scene context drives wall color, supporting decor, and exact or role-based runtime realization, which reduces the amount of ad hoc logic left on the headset.
 
+Several implementation artifacts, including semantic taxonomy files, scene-program policy files, prompt-policy text, and portions of the regression test suite, were drafted with AI assistance and then validated through repository tests and manual review. These artifacts were not treated as automatically correct: taxonomy and policy files are checked by loader tests, the visible unit suite is run as part of regression testing, and runtime behavior still requires backend smoke tests and human inspection in Unity.
+
 \section{Results and Findings}
 Evaluation focused on two simple questions: could the backend keep producing valid runtime contracts, and did the rooms start to feel more like places than piles of props? To answer that, the project relied on three forms of checking. Schema and contract tests verified that WorldSpec, manifest, and phase0 artifacts stayed valid. End-to-end backend runs exercised the live planning and placement path. Visual inspection in Unity caught the failures that did not show up cleanly in JSON, such as floating props, empty-feeling rooms, or layouts that were technically legal but still looked wrong. That framing is close in spirit to SceneEval, which argues that text-conditioned indoor scenes should be judged not only on explicit prompt match but also on implicit plausibility conditions such as support, collisions, and navigability~\cite{Tam_2026_WACV_SceneEval}.
+
+Instead of treating repository size or test count as results, the quantitative backend evaluation measured whether natural prompts could pass the live runtime contract: semantic planning, required-slot coverage, phase0 compilation, overlap checking, and safe-spawn selection. A fixed suite of ten natural prompts was run through the OpenRouter-backed planner using \texttt{openai/gpt-5.4} and the deterministic compiler. Four requests failed at the provider/API layer during the live run, so those upstream availability failures are excluded from the system-quality metrics below. The prompt suite was: cozy reading room, quiet night study, calm warm bedroom, small painting gallery, relaxation lounge, dark private library, writing/sketching studio, meditation room, display room for one important object, and rainy evening reading room.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lr}
+\hline
+Metric & Result \\
+\hline
+Semantic responses evaluated & 6 \\
+Planner success rate & 5/6 semantic responses \\
+Semantic coverage failures & 1/6 semantic responses \\
+Phase0 compile success rate & 5/5 planned worlds \\
+Safe-spawn success rate & 5/5 compiled worlds \\
+Hard-required slot coverage & 5/7 hard slots, excluding rescued fallbacks \\
+Prompts with all hard slots covered & 5/6 semantic responses \\
+Compiled worlds with zero final overlaps & 2/5 \\
+Compiled worlds requiring substitution & 0/5 \\
+\hline
+\end{tabular}
+\caption{Live backend evaluation on natural prompt requests that reached semantic validation. Failures were categorized by stage: semantic coverage failure, compilation failure, or safe-spawn failure.}
+\label{tab:live-backend-eval}
+\end{table}
+
+Every prompt that produced a valid plan compiled successfully and found a safe spawn, but asset coverage was still a limiting factor. The gallery prompt exposed a coverage edge case: wall-art substitutions needed to be compatible by concrete subtype rather than by broad \texttt{decor} role alone, and rescued slots should be reported separately from normal coverage. Placement also remained imperfect: only two of the five compiled worlds had zero final overlap warnings after repair, so the compiler is usable for MVP demonstrations but still needs stronger placement cleanup before broader evaluation.
+
+Because some tests were also AI-assisted, they are best understood as regression guards for known contracts rather than independent evidence that the generated rooms are visually successful.
 
 What showed up again and again was fairly simple. Early rooms were often valid enough to load, but they did not reliably read as intentional spaces. A desk, chair, and lamp might all be present, yet the result still felt scattered. Once the scene program carried clearer relationships, the approved asset metadata was cleaned up, and the backend started passing stronger scene context into runtime realization, the rooms became easier to read as studies, lounges, bedrooms, or workshops.
 

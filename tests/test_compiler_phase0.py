@@ -297,6 +297,69 @@ def test_compile_phase0_applies_face_to_yaw_with_front_offset(tmp_path):
     assert result["phase0_data"]["substitution_report"]["placement_audit"]["relation_failure_count"] == 0
 
 
+def test_compile_phase0_applies_vertical_origin_offset(monkeypatch, tmp_path):
+    worldspec = _load("worldspec_phase0_valid.json")
+    worldspec["placements"] = [
+        {
+            "asset_id": "core_table_01",
+            "transform": {"pos": [0.0, 0.0, 1.0], "rot": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+        },
+        {
+            "asset_id": "core_cabinet_01",
+            "vertical_origin_offset_meters": 0.18,
+            "constraint": {"type": "against_wall", "target": "core_table_01"},
+            "transform": {"pos": [0.0, 0.0, 0.0], "rot": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]},
+        },
+    ]
+
+    monkeypatch.setattr(
+        "src.compilation.phase0.collect_assets",
+        lambda pack_ids, registry: [
+            {
+                "asset_id": "core_table_01",
+                "label": "table",
+                "tags": ["table"],
+                "prefab_path": "Assets/Core/Table.prefab",
+                "planner_approved": True,
+                "planner_excluded": False,
+                "geometry": {"bounds": {"size": {"x": 2.0, "y": 1.0, "z": 2.0}}},
+            },
+            {
+                "asset_id": "core_cabinet_01",
+                "label": "cabinet",
+                "tags": ["cabinet"],
+                "prefab_path": "Assets/Core/Cabinet.prefab",
+                "planner_approved": True,
+                "planner_excluded": False,
+                "geometry": {"bounds": {"size": {"x": 1.0, "y": 2.0, "z": 1.0}}},
+                "vertical_origin_offset_meters": 0.18,
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        "src.compilation.phase0.resolve_asset_or_substitute",
+        lambda **kwargs: {
+            "resolved_asset_id": kwargs["requested_asset_id"],
+            "resolution_type": "exact",
+            "reason": "asset_found",
+            "coherence_checks": {},
+            "rejected_candidate_counts": {},
+            "alternatives": [],
+            "rationale": [],
+            "selection_backend": "semantic",
+            "semantic_failure_reason": None,
+        },
+    )
+
+    result = compile_phase0(worldspec, build_root=tmp_path)
+
+    assert result["ok"] is True
+    cabinet = next(
+        placement for placement in result["phase0_data"]["placements"] if placement["asset_id"] == "core_cabinet_01"
+    )
+    assert cabinet["transform"]["pos"][1] == 0.18
+
+
 def test_compile_phase0_group_repair_repositions_table_centered_seating(tmp_path):
     worldspec = _load("worldspec_phase0_valid.json")
     worldspec["placements"] = [
@@ -319,10 +382,10 @@ def test_compile_phase0_group_repair_repositions_table_centered_seating(tmp_path
 
     result = compile_phase0(worldspec, build_root=tmp_path)
 
-    assert result["ok"] is True
+    assert result["ok"] is False
+    assert result["errors"][0]["path"] == "$.placements"
     audit = result["phase0_data"]["substitution_report"]["placement_audit"]
-    assert audit["group_repairs_applied"] == 0
-    assert audit["group_layout_failure_count"] >= 1
+    assert audit["overlap_count"] >= 1
 
 
 def test_compile_phase0_preserves_wall_anchored_optional_positions(tmp_path):
@@ -398,6 +461,44 @@ def test_compile_phase0_near_constraints_do_not_reposition_assets_in_direct_mode
     assert large_distance > 0.0
     assert small_result["phase0_data"]["substitution_report"]["placement_audit"]["overlap_count"] == 0
     assert large_result["phase0_data"]["substitution_report"]["placement_audit"]["overlap_count"] == 0
+
+
+def test_compile_phase0_drops_decor_before_leaving_residual_overlap(monkeypatch, tmp_path):
+    worldspec = _load("worldspec_phase0_valid.json")
+    worldspec["placements"] = [
+        {"asset_id": "core_table_01", "role": "table", "transform": {"pos": [0.0, 0.0, 0.0], "rot": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]}},
+        {"asset_id": "core_chair_01", "role": "chair", "transform": {"pos": [0.15, 0.0, 0.0], "rot": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]}},
+        {"asset_id": "wall_art_01", "role": "decor", "transform": {"pos": [0.18, 0.0, 0.0], "rot": [0.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]}},
+    ]
+    asset_records = [
+        {"asset_id": "core_table_01", "label": "table", "tags": ["table"], "bounds": {"size": {"x": 2.4, "y": 1.0, "z": 2.4}}},
+        {"asset_id": "core_chair_01", "label": "chair", "tags": ["chair"], "bounds": {"size": {"x": 1.2, "y": 1.0, "z": 1.2}}},
+        {"asset_id": "wall_art_01", "label": "decor", "tags": ["decor"], "bounds": {"size": {"x": 1.4, "y": 1.0, "z": 1.4}}},
+    ]
+
+    monkeypatch.setattr("src.compilation.phase0.collect_assets", lambda pack_ids, registry: asset_records)
+    monkeypatch.setattr(
+        "src.compilation.phase0.resolve_asset_or_substitute",
+        lambda **kwargs: {
+            "resolved_asset_id": kwargs["requested_asset_id"],
+            "resolution_type": "exact",
+            "reason": "asset_found",
+            "coherence_checks": {},
+            "rejected_candidate_counts": {},
+            "alternatives": [],
+            "rationale": [],
+            "selection_backend": "semantic",
+            "semantic_failure_reason": None,
+        },
+    )
+
+    result = compile_phase0(worldspec, build_root=tmp_path)
+
+    assert result["ok"] is True
+    audit = result["phase0_data"]["substitution_report"]["placement_audit"]
+    assert audit["overlap_count"] == 0
+    assert "wall_art_01" not in {placement["asset_id"] for placement in result["phase0_data"]["placements"]}
+    assert result["safe_spawn"] is not None
 
 
 def test_compile_phase0_normalizes_scale_by_role_target_height(monkeypatch, tmp_path):

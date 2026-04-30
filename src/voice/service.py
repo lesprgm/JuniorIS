@@ -61,8 +61,10 @@ def _string_list(value: Any) -> List[str]:
 
 def resolve_voice_settings(user_prefs: Dict[str, Any] | None = None) -> Dict[str, Any]:
     prefs = user_prefs if isinstance(user_prefs, dict) else {}
+    env_chatter = os.getenv("JUNIORIS_ENABLE_LOADING_CHATTER", "true").strip().lower()
+    force_chatter = env_chatter in {"1", "true", "yes", "on"}
     return {
-        "enabled": _as_bool(prefs.get("enable_loading_chatter", os.getenv("JUNIORIS_ENABLE_LOADING_CHATTER", "false")), False),
+        "enabled": True if force_chatter else _as_bool(prefs.get("enable_loading_chatter", True), True),
         "voice_id": str(prefs.get("voice_id", os.getenv("ELEVENLABS_VOICE_ID", DEFAULT_VOICE_ID))).strip() or DEFAULT_VOICE_ID,
         "model_id": str(prefs.get("voice_model_id", os.getenv("ELEVENLABS_MODEL_ID", DEFAULT_MODEL_ID))).strip() or DEFAULT_MODEL_ID,
         "output_format": str(

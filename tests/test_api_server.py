@@ -376,6 +376,7 @@ def test_voice_chatter_plan_does_not_prefetch_when_voice_disabled(monkeypatch, t
 
     client = TestClient(api_server.app)
     monkeypatch.setattr(api_server, "BUILD_ROOT", tmp_path)
+    monkeypatch.setenv("JUNIORIS_ENABLE_LOADING_CHATTER", "false")
 
     response = client.post(
         "/voice/chatter_plan",
