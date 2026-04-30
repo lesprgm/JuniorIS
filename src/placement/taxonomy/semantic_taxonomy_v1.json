@@ -569,5 +569,162 @@
         "cabinet"
       ]
     }
+  },
+  "rescue_families": {
+    "wall_art": {
+      "slot_tokens": [
+        "art",
+        "artwork",
+        "focal_art",
+        "frame",
+        "gallery_graphic",
+        "painting",
+        "wall_art",
+        "wall_graphic"
+      ],
+      "asset_tokens": [
+        "art",
+        "artwork",
+        "frame",
+        "gallery_graphic",
+        "graphic",
+        "painting",
+        "picture",
+        "pictureframe",
+        "wall_art",
+        "wall_decor",
+        "wall_graphic"
+      ],
+      "duplicate_soften": true
+    },
+    "architectural_column": {
+      "slot_tokens": [
+        "architectural_column",
+        "column",
+        "pillar"
+      ],
+      "asset_tokens": [
+        "architectural",
+        "architectural_accent",
+        "architectural_column",
+        "column",
+        "greek_column",
+        "pillar"
+      ],
+      "duplicate_soften": true
+    },
+    "display_surface": {
+      "slot_tokens": [
+        "display",
+        "display_pedestal",
+        "display_plinth",
+        "display_surface",
+        "pedestal",
+        "plinth"
+      ],
+      "asset_tokens": [
+        "display",
+        "display_pedestal",
+        "display_plinth",
+        "display_surface",
+        "pedestal",
+        "plinth"
+      ],
+      "duplicate_soften": true
+    },
+    "lamp": {
+      "slot_tokens": [
+        "lamp",
+        "light",
+        "lighting",
+        "floor_lamp",
+        "task_lamp"
+      ],
+      "asset_tokens": [
+        "lamp",
+        "light",
+        "lighting",
+        "lantern",
+        "sconce",
+        "floor_lamp",
+        "task_lamp"
+      ],
+      "duplicate_soften": false
+    },
+    "chair": {
+      "slot_tokens": [
+        "chair",
+        "seat",
+        "seating",
+        "stool"
+      ],
+      "asset_tokens": [
+        "chair",
+        "seat",
+        "stool"
+      ],
+      "duplicate_soften": false
+    },
+    "table": {
+      "slot_tokens": [
+        "table",
+        "desk",
+        "nightstand",
+        "side_table",
+        "work_surface"
+      ],
+      "asset_tokens": [
+        "table",
+        "desk",
+        "nightstand",
+        "side_table",
+        "workbench"
+      ],
+      "duplicate_soften": false
+    },
+    "cabinet": {
+      "slot_tokens": [
+        "cabinet",
+        "storage",
+        "bookshelf",
+        "bookcase",
+        "dresser",
+        "wardrobe"
+      ],
+      "asset_tokens": [
+        "cabinet",
+        "storage",
+        "bookshelf",
+        "bookcase",
+        "dresser",
+        "wardrobe"
+      ],
+      "duplicate_soften": false
+    },
+    "bed": {
+      "slot_tokens": [
+        "bed",
+        "sleep_anchor",
+        "sleep_surface"
+      ],
+      "asset_tokens": [
+        "bed",
+        "bedframe"
+      ],
+      "duplicate_soften": false
+    },
+    "sofa": {
+      "slot_tokens": [
+        "sofa",
+        "couch",
+        "loveseat"
+      ],
+      "asset_tokens": [
+        "sofa",
+        "couch",
+        "loveseat"
+      ],
+      "duplicate_soften": false
+    }
   }
 }
