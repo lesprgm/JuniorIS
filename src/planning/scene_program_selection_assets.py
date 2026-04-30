@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from collections import Counter
 from typing import Any, Dict, List
 
 from src.catalog.style_material_pool import SURFACE_MATERIAL_SLOTS
-from src.placement.geometry import canonicalize_semantic_concept, canonicalize_semantic_role
+from src.placement.semantic_taxonomy import (
+    asset_matches_rescue_family,
+    rescue_family_allows_duplicate_soften,
+    rescue_family_for_slot,
+)
 from src.planning.asset_shortlist import asset_allowed_for_slot
 from src.planning.scene_policy import asset_allowed_by_scene_policy
 from src.planning.scene_types import SUPPORTED_SEMANTIC_ROLES
@@ -214,6 +217,68 @@ def _normalize_fallback_asset_ids_by_slot(raw_value: Any, *, scene_program: Dict
     return normalized
 
 
+def _rescue_missing_hard_slots(
+    *,
+    scene_program: Dict[str, Any],
+    slot_asset_map: Dict[str, str],
+    fallback_asset_ids_by_slot: Dict[str, List[str]],
+    all_assets: List[Dict[str, Any]],
+    blocked_slot_ids: set[str] | None = None,
+) -> tuple[Dict[str, str], Dict[str, List[str]], List[str]]:
+    assets_by_id = {
+        str(asset.get("asset_id") or "").strip(): asset
+        for asset in all_assets
+        if isinstance(asset, dict) and str(asset.get("asset_id") or "").strip()
+    }
+    out_map = dict(slot_asset_map)
+    out_fallbacks = {slot_id: list(asset_ids) for slot_id, asset_ids in fallback_asset_ids_by_slot.items()}
+    softened: List[str] = []
+    blocked = set(blocked_slot_ids or set())
+    rescued_families: set[str] = set()
+    used_asset_ids = set(out_map.values())
+    for slot in sorted(_scene_slots(scene_program), key=_slot_sort_key):
+        slot_id = str(slot.get("slot_id") or "").strip()
+        if not slot_id or slot_id in out_map or slot_id in blocked or not _is_hard_required_slot(slot, scene_program=scene_program):
+            continue
+        family = rescue_family_for_slot(slot)
+        if not family:
+            continue
+        candidates = [
+            assets_by_id[asset_id]
+            for asset_id in out_fallbacks.get(slot_id, [])
+            if asset_id in assets_by_id and asset_id not in used_asset_ids
+        ]
+        candidates.extend(
+            asset for asset_id, asset in assets_by_id.items()
+            if asset_id not in used_asset_ids and asset not in candidates
+        )
+        compatible = [
+            asset
+            for asset in candidates
+            if asset_matches_rescue_family(asset, family)
+            and asset_allowed_by_scene_policy(asset, scene_context=scene_program, prompt_text=str(scene_program.get("source_prompt") or ""), slot=slot)
+            and asset_allowed_for_slot(asset, scene_program=scene_program, intent_spec=None, prompt_text=str(scene_program.get("source_prompt") or ""), slot=slot)
+        ]
+        if compatible:
+            preferred = {asset_id: index for index, asset_id in enumerate(out_fallbacks.get(slot_id, []))}
+            chosen = max(
+                compatible,
+                key=lambda asset: (
+                    str(asset.get("asset_id") or "") in preferred,
+                    float(asset.get("semantic_confidence") or 0.0),
+                    str(asset.get("asset_id") or ""),
+                ),
+            )
+            chosen_id = str(chosen.get("asset_id") or "").strip()
+            out_map[slot_id] = chosen_id
+            out_fallbacks[slot_id] = [chosen_id] + [asset_id for asset_id in out_fallbacks.get(slot_id, []) if asset_id != chosen_id]
+            used_asset_ids.add(chosen_id)
+            rescued_families.add(family)
+        elif family in rescued_families and rescue_family_allows_duplicate_soften(family):
+            softened.append(slot_id)
+    return out_map, out_fallbacks, softened
+
+
 def _normalize_rejected_candidates_by_slot(
     raw_value: Any,
     *,
@@ -364,6 +429,7 @@ def _expanded_assets_from_selection(
     group_assignments: List[Dict[str, Any]],
     all_assets: List[Dict[str, Any]],
     prompt_text: str = "",
+    softened_rescue_slot_ids: List[str] | None = None,
 ) -> tuple[List[Dict[str, Any]], List[str]]:
     by_id = {
         str(asset.get("asset_id") or "").strip(): dict(asset)
@@ -382,6 +448,7 @@ def _expanded_assets_from_selection(
     instance_index = 0
     covered_slot_ids: set[str] = set()
     missing_required_slot_ids: set[str] = set()
+    softened_slot_ids = set(softened_rescue_slot_ids or [])
 
     def asset_allowed_for_expansion(asset: Dict[str, Any], slot_id: str) -> bool:
         return asset_allowed_for_slot(
@@ -427,7 +494,7 @@ def _expanded_assets_from_selection(
             hard_missing = [
                 slot_id
                 for slot_id in anchor_slot_ids
-                if _is_hard_required_slot(slots_by_id.get(slot_id, {}), scene_program=scene_program)
+                if slot_id not in softened_slot_ids and _is_hard_required_slot(slots_by_id.get(slot_id, {}), scene_program=scene_program)
             ]
             missing_required_slot_ids.update(hard_missing)
             if hard_missing:
@@ -437,7 +504,7 @@ def _expanded_assets_from_selection(
             hard_missing = [
                 slot_id
                 for slot_id in member_slot_ids
-                if _is_hard_required_slot(slots_by_id.get(slot_id, {}), scene_program=scene_program)
+                if slot_id not in softened_slot_ids and _is_hard_required_slot(slots_by_id.get(slot_id, {}), scene_program=scene_program)
             ]
             missing_required_slot_ids.update(hard_missing)
             if hard_missing:
@@ -477,7 +544,7 @@ def _expanded_assets_from_selection(
         asset_id = str(slot_asset_map.get(slot_id) or "").strip()
         asset_record = by_id.get(asset_id)
         if asset_record is None or not asset_allowed_for_expansion(asset_record, slot_id):
-            if _is_hard_required_slot(slot, scene_program=scene_program):
+            if slot_id not in softened_slot_ids and _is_hard_required_slot(slot, scene_program=scene_program):
                 missing_required_slot_ids.add(slot_id)
             continue
         for _ in range(max(1, int(slot.get("count") or 1))):
@@ -495,4 +562,3 @@ def _expanded_assets_from_selection(
         errors.extend(sorted(missing_required_slot_ids))
 
     return chosen_assets, errors
-

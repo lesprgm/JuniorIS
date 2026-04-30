@@ -39,6 +39,7 @@ def validate_semantic_taxonomy(payload: Dict[str, Any]) -> None:
         "substitution_families",
         "role_match_tokens",
         "decor",
+        "rescue_families",
     }
     missing = sorted(required - set(payload))
     if missing:
@@ -55,6 +56,9 @@ def validate_semantic_taxonomy(payload: Dict[str, Any]) -> None:
     for rule in payload.get("token_grounding_rules") or []:
         if not isinstance(rule, dict) or _normalize_token(rule.get("runtime_role")) not in supported_roles:
             raise ValueError("token_grounding_rules entries must map to supported runtime roles")
+    for family, rule in dict(payload.get("rescue_families") or {}).items():
+        if not isinstance(rule, dict) or not string_list(rule.get("slot_tokens")) or not string_list(rule.get("asset_tokens")):
+            raise ValueError(f"rescue_families.{family} must define slot_tokens and asset_tokens")
 
 
 def string_list(value: Any) -> List[str]:
@@ -160,6 +164,55 @@ def expand_semantic_aliases(tokens: Iterable[str]) -> set[str]:
         if normalized & triggers:
             aliases.update(string_list(group.get("aliases")))
     return aliases
+
+
+def _tokens_from_values(values: Iterable[Any], *, expand_aliases: bool = False) -> set[str]:
+    tokens: set[str] = set()
+    for value in values:
+        token = _normalize_token(value)
+        if not token:
+            continue
+        tokens.add(token)
+        tokens.update(_token_parts(token))
+        concept = canonicalize_concept(token)
+        if concept:
+            tokens.add(concept)
+    return tokens | (expand_semantic_aliases(tokens) if expand_aliases else set())
+
+
+def _record_tokens(record: Dict[str, Any], scalar_keys: Iterable[str], list_keys: Iterable[str]) -> set[str]:
+    values: List[Any] = [record.get(key) for key in scalar_keys]
+    for key in list_keys:
+        raw = record.get(key)
+        if isinstance(raw, list):
+            values.extend(raw)
+    return _tokens_from_values(values)
+
+
+def rescue_family_for_slot(slot: Dict[str, Any]) -> str:
+    tokens = _record_tokens(slot, ("slot_id", "concept", "subtype", "runtime_role", "runtime_role_hint"), ())
+    tokens |= expand_semantic_aliases(tokens)
+    for family, rule in dict(load_semantic_taxonomy().get("rescue_families") or {}).items():
+        if tokens & set(string_list(dict(rule).get("slot_tokens"))):
+            return _normalize_token(family)
+    return ""
+
+
+def rescue_family_allows_duplicate_soften(family: str) -> bool:
+    rule = dict(dict(load_semantic_taxonomy().get("rescue_families") or {}).get(_normalize_token(family)) or {})
+    return rule.get("duplicate_soften") is True
+
+
+def asset_matches_rescue_family(asset: Dict[str, Any], family: str) -> bool:
+    rule = dict(dict(load_semantic_taxonomy().get("rescue_families") or {}).get(_normalize_token(family)) or {})
+    if not rule:
+        return False
+    tokens = _record_tokens(
+        asset,
+        ("asset_id", "label", "display_name", "room_role_subtype", "semantic_concept", "category"),
+        ("tags", "support_surface_types"),
+    )
+    return bool(tokens & set(string_list(rule.get("asset_tokens"))))
 
 
 def substitution_family_for_tokens(tokens: Iterable[str]) -> str:

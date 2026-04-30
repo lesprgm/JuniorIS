@@ -4,9 +4,9 @@ from typing import Any, Dict, List
 
 from src.llm.planner import request_llm_design_brief, request_llm_intent, request_llm_selection
 from src.catalog.pack_registry import load_pack_registry
-from src.placement.geometry import canonicalize_semantic_role, map_semantic_concept_to_runtime_role
 from src.planning import assets as planner_assets
 from src.planning import semantics as planner_semantics
+from src.planning.scene_program_common import _derive_role_fields_from_slots
 from src.planning.utils import normalize_bool as _normalize_bool, seed_from_prompt as _seed_from_prompt
 from src.catalog.stylekit_registry import load_stylekit_registry
 from src.runtime.decor_plan import build_decor_asset_ids_by_kind, build_decor_capabilities
@@ -170,28 +170,12 @@ def _budget_overrides(user_prefs: Dict[str, Any]) -> Dict[str, int]:  # applies 
 
 
 def _required_slot_anchor_count(scene_program: Dict[str, Any]) -> Dict[str, int]:
-    semantic_slots = [
+    slots = [
         slot
         for slot in list(scene_program.get("semantic_slots") or [])
         if isinstance(slot, dict) and str(slot.get("slot_id") or "").strip()
     ]
-    role_counts: Dict[str, int] = {}
-    for slot in semantic_slots:
-        priority = str(slot.get("priority") or "should").strip().lower()
-        if priority == "optional":
-            continue
-        concept = slot.get("concept") or slot.get("runtime_role_hint") or slot.get("runtime_role")
-        runtime_role = canonicalize_semantic_role(
-            map_semantic_concept_to_runtime_role(concept)[0]
-            or slot.get("runtime_role_hint")
-            or concept
-        )
-        if not runtime_role:
-            continue
-        role_counts[runtime_role] = max(
-            role_counts.get(runtime_role, 0),
-            max(1, int(slot.get("count") or 1)),
-        )
+    _, _, role_counts = _derive_role_fields_from_slots(slots)
     counts = {"floor": 0, "wall": 0, "surface": 0, "lights": 0, "clutter_weight": 0}
     for role, count in role_counts.items():
         if role == "sign":

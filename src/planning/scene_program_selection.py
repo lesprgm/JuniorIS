@@ -9,7 +9,6 @@ from src.planning.scene_program_selection_assets import (
 )
 from src.planning.scene_program_selection_payload import (
     _ground_selection_slots,
-    _normalize_fallback_asset_ids_by_slot,
     _normalize_pack_ids,
     _normalize_selection_budgets,
     _normalize_selection_extras,
@@ -81,7 +80,7 @@ def validate_semantic_plan(  # validates an LLM selection response: checks style
         )
 
     pack_ids = _normalize_pack_ids(selection.get("pack_ids"), allowed_pack_ids)
-    scene_program, slot_asset_map = _ground_selection_slots(
+    scene_program, slot_asset_map, normalized_fallback_asset_ids_by_slot, softened_rescue_slot_ids = _ground_selection_slots(
         selection,
         scene_program=base_scene_program,
         all_assets=all_assets,
@@ -100,6 +99,7 @@ def validate_semantic_plan(  # validates an LLM selection response: checks style
         group_assignments=group_assignments,
         all_assets=all_assets,
         prompt_text=prompt_text,
+        softened_rescue_slot_ids=softened_rescue_slot_ids,
     )
     chosen_asset_ids = [str(asset.get("asset_id")) for asset in chosen_assets]
     budgets = _normalize_selection_budgets(selection, default_budgets)
@@ -113,12 +113,6 @@ def validate_semantic_plan(  # validates an LLM selection response: checks style
         (isinstance(selection.get("slot_asset_map"), dict) and selection.get("slot_asset_map"))
         or (isinstance(selection.get("group_assignments"), list) and selection.get("group_assignments"))
     )
-    normalized_fallback_asset_ids_by_slot = _normalize_fallback_asset_ids_by_slot(
-        selection.get("fallback_asset_ids_by_slot"),
-        scene_program=scene_program,
-        all_assets=all_assets,
-    )
-
     if not (slot_asset_map or group_assignments):
         if raw_selection_attempted:
             return _selection_error(
@@ -154,6 +148,7 @@ def validate_semantic_plan(  # validates an LLM selection response: checks style
         slot_asset_map=slot_asset_map,
         fallback_asset_ids_by_slot=normalized_fallback_asset_ids_by_slot,
         selection_coverage_errors=selection_coverage_errors,
+        softened_rescue_slot_ids=softened_rescue_slot_ids,
         prompt_text=prompt_text,
     )
     if coverage["selection_coverage_errors"] or coverage["missing_required_slots"]:
@@ -242,4 +237,3 @@ def validate_semantic_plan(  # validates an LLM selection response: checks style
         "decor_plan": semantic_selection["decor_plan"],
         "surface_material_selection": surface_material_selection,
     }
-

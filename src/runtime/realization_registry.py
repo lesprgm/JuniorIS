@@ -54,6 +54,11 @@ def resolve_target_height_meters(asset: Dict[str, Any], role: str | None = None)
     return float(value) if isinstance(value, (int, float)) else 1.0
 
 
+def resolve_vertical_origin_offset_meters(asset: Dict[str, Any]) -> float:
+    raw_value = asset.get("vertical_origin_offset_meters")
+    return float(raw_value) if isinstance(raw_value, (int, float)) else 0.0
+
+
 def resolve_target_height_ratio_bounds(asset: Dict[str, Any], role: str | None = None) -> tuple[float, float]:
     defaults = _role_defaults(role or _normalized_role(asset))
     min_ratio = defaults.get("min_height_ratio")
@@ -98,6 +103,7 @@ def build_runtime_asset_registry(assets: Iterable[Dict[str, Any]]) -> Dict[str, 
             "target_height": defaults["target_height"],
             "proxy_kind": defaults["proxy_kind"],
             "front_yaw_offset_degrees": resolve_front_yaw_offset_degrees(raw, role),
+            "vertical_origin_offset_meters": resolve_vertical_origin_offset_meters(raw),
             "source_pack": raw.get("source_pack"),
             "quality_tier": raw.get("quality_tier"),
             "perf_tier": raw.get("perf_tier"),
@@ -151,11 +157,12 @@ def build_runtime_asset_registry(assets: Iterable[Dict[str, Any]]) -> Dict[str, 
                 "target_height": defaults["target_height"],
                 "proxy_kind": defaults["proxy_kind"],
                 "front_yaw_offset_degrees": 0.0,
+                "vertical_origin_offset_meters": 0.0,
             }
         )
 
     fingerprint_source = "\n".join(
-        f"{item['asset_id']}|{item['role']}|{item['prefab_path']}|{item['target_height']}|{item['proxy_kind']}|{item['front_yaw_offset_degrees']}"
+        f"{item['asset_id']}|{item['role']}|{item['prefab_path']}|{item['target_height']}|{item['proxy_kind']}|{item['front_yaw_offset_degrees']}|{item['vertical_origin_offset_meters']}"
         for item in approved_assets
     )
     fingerprint = hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()

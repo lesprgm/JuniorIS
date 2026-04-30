@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable
 
 from src.placement.geometry import canonicalize_semantic_concept, canonicalize_semantic_role
-from src.placement.semantic_taxonomy import scene_allows_policy, scene_policy_tokens, tokens_match_scene_policy
+from src.placement.semantic_taxonomy import load_semantic_taxonomy, scene_allows_policy, scene_policy_tokens, tokens_match_scene_policy
 
 
 def split_policy_tokens(value: Any) -> set[str]:
@@ -71,6 +71,14 @@ def asset_policy_tokens(asset: Dict[str, Any]) -> set[str]:
     return tokens
 
 
+def asset_negative_scene_affinities(asset: Dict[str, Any]) -> set[str]:
+    tokens: set[str] = set()
+    for value in string_list(asset.get("negative_scene_affinities")):
+        tokens.add(value)
+        tokens.update(split_policy_tokens(value))
+    return tokens
+
+
 def slot_policy_tokens(slot: Dict[str, Any] | None) -> set[str]:
     if not isinstance(slot, dict):
         return set()
@@ -93,11 +101,17 @@ def asset_allowed_by_scene_policy(
     scene_tokens = scene_policy_context_tokens(scene_context, prompt_text=prompt_text, include_layout_tokens=True)
     negative_tokens = negative_policy_tokens(scene_context)
     asset_tokens = asset_policy_tokens(asset)
+    if asset_negative_scene_affinities(asset) & scene_tokens:
+        return False
 
-    if tokens_match_scene_policy("bathroom_assets", asset_tokens):
-        if not scene_allows_policy("bathroom_assets", scene_tokens, negative_tokens):
-            return False
-        blocked_slot_tokens = scene_policy_tokens("bathroom_assets", "disallow_slot_tokens")
-        if blocked_slot_tokens and slot_policy_tokens(slot) & blocked_slot_tokens:
-            return False
+    policies = load_semantic_taxonomy().get("scene_policies")
+    if isinstance(policies, dict):
+        for policy_name, _policy in policies.items():
+            if not tokens_match_scene_policy(policy_name, asset_tokens):
+                continue
+            if not scene_allows_policy(policy_name, scene_tokens, negative_tokens):
+                return False
+            blocked_slot_tokens = scene_policy_tokens(policy_name, "disallow_slot_tokens")
+            if blocked_slot_tokens and slot_policy_tokens(slot) & blocked_slot_tokens:
+                return False
     return True

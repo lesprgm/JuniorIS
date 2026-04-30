@@ -5,9 +5,7 @@ import json
 from typing import Any, Dict, List, Tuple
 
 from src.placement.geometry import (
-    canonicalize_semantic_role,
     geometry_profile_from_asset,
-    map_semantic_concept_to_runtime_role,
     room_capacity_summary,
     semantic_role_key,
 )
@@ -15,46 +13,40 @@ from src.placement.scene_solver import solve_scene_layout
 from src.world.templates import ROOM_BASIC_DIMENSIONS
 
 from src.planning.asset_shortlist import _ordered_selected_assets, filter_candidate_assets
+from src.planning.scene_program_common import _derive_role_fields_from_slots
 from src.planning.scene_policy import asset_allowed_by_scene_policy
 
-
-def _slot_priority(priority: Any) -> str:
-    token = str(priority or "should").strip().lower()
-    return token if token in {"must", "should", "optional"} else "should"
+# Tokens that identify floor-appropriate textiles (carpets, rugs).
+_FLOOR_TEXTILE_TOKENS = {"carpet", "rug", "mat", "runner", "floormat"}
 
 
-def _semantic_slot_role(slot: Dict[str, Any]) -> str:
-    concept = slot.get("concept") or slot.get("runtime_role_hint") or slot.get("runtime_role")
-    runtime_role, _ = map_semantic_concept_to_runtime_role(concept)
-    return runtime_role or canonicalize_semantic_role(slot.get("runtime_role_hint") or concept)
+def _is_surface_only_textile(asset: Dict[str, Any]) -> bool:
+    """Return True for textiles (pillows, towels, blankets) that must NOT be placed on the floor.
+
+    Carpets and rugs are the only textiles allowed on the floor; everything
+    else should only appear as a surface-anchored optional addition.
+    """
+    role = semantic_role_key(asset)
+    usable_roles = [str(r).strip().lower() for r in (asset.get("usable_roles") or []) if isinstance(r, str)]
+    tags = [str(t).strip().lower() for t in (asset.get("tags") or []) if isinstance(t, str)]
+    is_textile = role == "textile" or "textile" in usable_roles or "textile" in tags
+    if not is_textile:
+        return False
+    asset_id_lower = str(asset.get("asset_id") or "").lower()
+    label_lower = str(asset.get("label") or "").lower()
+    all_tokens = set(tags) | set(usable_roles) | set(asset_id_lower.replace("/", " ").replace("-", " ").replace("_", " ").split()) | set(label_lower.split())
+    if all_tokens & _FLOOR_TEXTILE_TOKENS:
+        return False  # carpets/rugs belong on the floor
+    return True  # pillows, towels, blankets, cushions → surface only
 
 
 def _scene_slot_targets(scene_program: Dict[str, Any]) -> tuple[List[str], List[str], Dict[str, int]]:
-    semantic_slots = [
+    slots = [
         slot
         for slot in list(scene_program.get("semantic_slots") or [])
         if isinstance(slot, dict) and str(slot.get("slot_id") or "").strip()
     ]
-    required_roles: List[str] = []
-    optional_roles: List[str] = []
-    target_role_counts: Dict[str, int] = {}
-    for slot in semantic_slots:
-        runtime_role = _semantic_slot_role(slot)
-        if not runtime_role:
-            continue
-        if _slot_priority(slot.get("priority")) == "optional":
-            if runtime_role not in required_roles and runtime_role not in optional_roles:
-                optional_roles.append(runtime_role)
-        else:
-            if runtime_role not in required_roles:
-                required_roles.append(runtime_role)
-            if runtime_role in optional_roles:
-                optional_roles.remove(runtime_role)
-        target_role_counts[runtime_role] = max(
-            target_role_counts.get(runtime_role, 0),
-            max(1, int(slot.get("count") or 1)),
-        )
-    return required_roles, optional_roles, target_role_counts
+    return _derive_role_fields_from_slots(slots)
 
 
 def _empty_layout_plan(placement_intent: Dict[str, Any]) -> Dict[str, Any]:
@@ -190,6 +182,9 @@ def build_optional_raw_placements(
         anchor = str(entry.get("anchor") or "").strip().lower()
         placement_mode = str(entry.get("placement_mode") or "").strip().lower()
         usage = str(entry.get("usage") or "").strip().lower()
+        # Block surface-only textiles (pillows, towels) from floor placement.
+        if anchor in {"", "floor"} and _is_surface_only_textile(asset):
+            continue
         placement_hint = str(entry.get("placement_hint") or "").strip().lower()
         geometry_profile = geometry_profile_from_asset(asset)
         default_pos = _optional_position_from_hint(
@@ -420,6 +415,8 @@ def _layout_inputs_from_selected_assets(  # translates selected semantic objects
             prompt_text=str(scene_program.get("source_prompt") or ""),
         )
     ]
+    # Exclude surface-only textiles (pillows, towels) from the floor layout.
+    selected_assets = [a for a in selected_assets if not _is_surface_only_textile(a)]
     if not selected_assets:
         return [], _empty_layout_plan(placement_intent)
 

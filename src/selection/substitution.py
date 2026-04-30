@@ -18,8 +18,7 @@ _PERF_HINT_ORDER = {"low": 0, "medium": 1, "high": 2}  # rank order classificati
 
 
 @dataclass(frozen=True)
-# Keep behavior deterministic so planner/runtime contracts stay stable.
-class ResolvedAsset:  # immutable result of asset resolution with full audit trail
+class ResolvedAsset:
     resolved_asset_id: str
     resolution_type: str  # exact | substitute | placeholder
     reason: str
@@ -44,33 +43,27 @@ class ResolvedAsset:  # immutable result of asset resolution with full audit tra
         }
 
 
-def _tokenize(text: str) -> set[str]:  # extracts alphanumeric tokens for fuzzy tag matching
+def _tokenize(text: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]+", (text or "").lower()))
 
 
 def _normalize_tags(values: Any) -> List[str]:
     if not isinstance(values, list):
         return []
-    out: List[str] = []
-    for value in values:
-        if isinstance(value, str):
-            token = value.strip().lower()
-            if token:
-                out.append(token)
-    return out
+    return [token for value in values if isinstance(value, str) and (token := value.strip().lower())]
 
 
-def _optional_lower_string(value: Any) -> str | None:  # safely lowercases string or drops None/non-strings
+def _optional_lower_string(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
     token = value.strip().lower()
     return token or None
 
 
-def _substitution_family(tokens: Iterable[str]) -> str | None:  # maps tokens to taxonomy-backed substitute families
+def _substitution_family(tokens: Iterable[str]) -> str | None:
     return substitution_family_for_tokens(tokens) or None
 
-def _adjacent_poly_allowed(requested_poly: str, candidate_poly: str) -> bool:  # allows +-1 poly tier mismatch (e.g., low can use mid but not high)
+def _adjacent_poly_allowed(requested_poly: str, candidate_poly: str) -> bool:
     req_idx = _POLY_ORDER.get(requested_poly)
     cand_idx = _POLY_ORDER.get(candidate_poly)
     if req_idx is None or cand_idx is None:
@@ -78,11 +71,11 @@ def _adjacent_poly_allowed(requested_poly: str, candidate_poly: str) -> bool:  #
     return abs(req_idx - cand_idx) <= 1
 
 
-def _safe_tag_overlap(a: Iterable[str], b: Iterable[str]) -> int:  # utility to count intersection matches between two tag arrays
+def _safe_tag_overlap(a: Iterable[str], b: Iterable[str]) -> int:
     return len(set(a) & set(b))
 
 
-def _asset_pack_id_from_hint(asset_id: str, registry: PackRegistry) -> str | None:  # extracts assumed pack namespace from the prefix of the asset ID if registry is missing it
+def _asset_pack_id_from_hint(asset_id: str, registry: PackRegistry) -> str | None:
     if asset_id in registry.assets_by_id:
         return registry.assets_by_id[asset_id]["pack_id"]
 
@@ -96,7 +89,7 @@ def _asset_pack_id_from_hint(asset_id: str, registry: PackRegistry) -> str | Non
     return None
 
 
-def _derive_requested_profile(  # synthesizes the expected category/tags/role for an asset when searching for alternates
+def _derive_requested_profile(
     requested_asset_id: str,
     requested_tags: List[str] | None,
     requested_meta: Dict[str, Any] | None,
@@ -113,9 +106,7 @@ def _derive_requested_profile(  # synthesizes the expected category/tags/role fo
     if not tags:
         tags = sorted(_tokenize(requested_asset_id))
 
-    category = requested_meta.get("category")
-    if not isinstance(category, str):
-        category = _substitution_family(tags)
+    category = requested_meta.get("category") if isinstance(requested_meta.get("category"), str) else _substitution_family(tags)
     role = semantic_role_key(
         {
             "category": category,
@@ -139,13 +130,11 @@ def _derive_requested_profile(  # synthesizes the expected category/tags/role fo
     }
 
 
-def _candidate_record(pack_id: str, pack: Dict[str, Any], asset: Dict[str, Any]) -> Dict[str, Any]:  # flattens an asset and its pack metadata into a single substitution candidate profile
+def _candidate_record(pack_id: str, pack: Dict[str, Any], asset: Dict[str, Any]) -> Dict[str, Any]:
     tags = _normalize_tags(asset.get("tags"))
     label = str(asset.get("label", ""))
     tokens = set(tags) | _tokenize(label) | _tokenize(asset.get("asset_id", ""))
-    category = asset.get("category")
-    if not isinstance(category, str):
-        category = _substitution_family(tokens)
+    category = asset.get("category") if isinstance(asset.get("category"), str) else _substitution_family(tokens)
     role = semantic_role_key(
         {
             "category": category,
@@ -155,21 +144,12 @@ def _candidate_record(pack_id: str, pack: Dict[str, Any], asset: Dict[str, Any])
         }
     )
 
-    style_tags = _normalize_tags(asset.get("style_tags"))
-    era_tags = _normalize_tags(asset.get("era_tags"))
-    color_tags = _normalize_tags(asset.get("color_tags"))
-
     visual_style = _optional_lower_string(asset.get("visual_style"))
     poly_style = _optional_lower_string(asset.get("poly_style"))
     if poly_style is None:
         poly_hint = _optional_lower_string(pack.get("perf_meta", {}).get("poly_budget_hint", ""))
         if poly_hint in _POLY_HINT_ORDER:
             poly_style = "mid" if poly_hint == "medium" else poly_hint
-
-    quest_compatible = asset.get("quest_compatible")
-    classification = asset.get("classification")
-    if not isinstance(classification, str):
-        classification = "prop"
 
     perf_meta = pack.get("perf_meta", {}) if isinstance(pack.get("perf_meta"), dict) else {}
     texture_tier = perf_meta.get("texture_tier", 1)
@@ -184,19 +164,19 @@ def _candidate_record(pack_id: str, pack: Dict[str, Any], asset: Dict[str, Any])
         "tags": tags,
         "category": canonicalize_semantic_role(category),
         "role": role,
-        "style_tags": style_tags,
-        "era_tags": era_tags,
-        "color_tags": color_tags,
+        "style_tags": _normalize_tags(asset.get("style_tags")),
+        "era_tags": _normalize_tags(asset.get("era_tags")),
+        "color_tags": _normalize_tags(asset.get("color_tags")),
         "visual_style": visual_style,
         "poly_style": poly_style,
-        "quest_compatible": quest_compatible,
-        "classification": classification,
+        "quest_compatible": asset.get("quest_compatible"),
+        "classification": asset.get("classification") if isinstance(asset.get("classification"), str) else "prop",
         "texture_tier": texture_tier,
         "perf_rank": perf_rank,
     }
 
 
-def _room_theme_sets(room_theme: Dict[str, Any] | None) -> Tuple[set[str], set[str], set[str]]:  # separates a theme definition into style, era, and color tag sets
+def _room_theme_sets(room_theme: Dict[str, Any] | None) -> Tuple[set[str], set[str], set[str]]:
     room_theme = room_theme or {}
     return (
         set(_normalize_tags(room_theme.get("style_tags"))),
@@ -205,7 +185,7 @@ def _room_theme_sets(room_theme: Dict[str, Any] | None) -> Tuple[set[str], set[s
     )
 
 
-def _theme_overlap(candidate: Dict[str, Any], style_tags: Iterable[str], era_tags: Iterable[str], color_tags: Iterable[str]) -> int:  # counts total overlapping markers between an asset candidate and the room's desired theme
+def _theme_overlap(candidate: Dict[str, Any], style_tags: Iterable[str], era_tags: Iterable[str], color_tags: Iterable[str]) -> int:
     return (
         _safe_tag_overlap(candidate.get("style_tags", []), style_tags)
         + _safe_tag_overlap(candidate.get("era_tags", []), era_tags)

@@ -28,8 +28,7 @@ def _half_extents(dimensions: Dict[str, float], margin: float = 0.8) -> Tuple[fl
 
 
 def _clamp_floor_position(position: Sequence[float], dimensions: Dict[str, float], margin: float = 0.45) -> List[float]:
-    half_width = max((float(dimensions.get("width") or 8.0) * 0.5) - margin, 0.0)
-    half_length = max((float(dimensions.get("length") or 8.0) * 0.5) - margin, 0.0)
+    half_width, half_length = _half_extents(dimensions, margin)
     return [
         _round3(max(min(float(position[0]), half_width), -half_width)),
         0.0,
@@ -222,25 +221,29 @@ def _candidate_score(
     return score
 
 
-def _candidate_variants(desired_pos: Sequence[float], anchor_pos: Sequence[float] | None = None) -> List[List[float]]:
+def _candidate_variants(desired_pos: Sequence[float], anchor_pos: Sequence[float] | None = None, footprint_radius: float = 0.6) -> List[List[float]]:
+    # Scale the offset grid by the object's footprint so larger furniture
+    # explores a wider area and avoids merging with neighbors.
+    base_offset = max(0.55, footprint_radius * 0.8)
     candidates = [[float(desired_pos[0]), 0.0, float(desired_pos[2])]]
     offsets = [
-        (0.55, 0.0),
-        (-0.55, 0.0),
-        (0.0, 0.55),
-        (0.0, -0.55),
-        (0.55, 0.55),
-        (-0.55, 0.55),
-        (0.55, -0.55),
-        (-0.55, -0.55),
+        (base_offset, 0.0),
+        (-base_offset, 0.0),
+        (0.0, base_offset),
+        (0.0, -base_offset),
+        (base_offset, base_offset),
+        (-base_offset, base_offset),
+        (base_offset, -base_offset),
+        (-base_offset, -base_offset),
     ]
     for offset_x, offset_z in offsets:
         candidates.append([float(desired_pos[0]) + offset_x, 0.0, float(desired_pos[2]) + offset_z])
     if anchor_pos is not None:
         base_distance = max(_distance_xz(desired_pos, anchor_pos), 0.7)
         base_angle = math.degrees(math.atan2(float(desired_pos[0]) - float(anchor_pos[0]), float(desired_pos[2]) - float(anchor_pos[2])))
+        ring_step = max(0.25, footprint_radius * 0.3)
         for ring in range(1, 4):
-            distance = base_distance + (0.25 * ring)
+            distance = base_distance + (ring_step * ring)
             for step in range(8):
                 angle = math.radians(base_angle + (step * 45.0))
                 candidates.append([
@@ -263,10 +266,10 @@ def _resolve_scored_position(
     zone_preference: str,
     anchor_pos: Sequence[float] | None = None,
     skip_group_id: str = "",
-) -> Tuple[List[float], float]:
+) -> Tuple[List[float], float] | None:
     best_position: List[float] | None = None
     best_score = float("-inf")
-    for candidate in _candidate_variants(desired_pos, anchor_pos=anchor_pos):
+    for candidate in _candidate_variants(desired_pos, anchor_pos=anchor_pos, footprint_radius=footprint_radius):
         clamped = _clamp_floor_position(candidate, dimensions)
         if not _is_clear(clamped, footprint_radius, existing, skip_group_id=skip_group_id):
             continue
@@ -286,18 +289,7 @@ def _resolve_scored_position(
             best_score = score
     if best_position is not None:
         return best_position, best_score
-    clamped = _clamp_floor_position(desired_pos, dimensions)
-    return clamped, _candidate_score(
-        position=clamped,
-        yaw=yaw,
-        role=role,
-        dimensions=dimensions,
-        existing=existing,
-        footprint_radius=footprint_radius,
-        scene_program=scene_program,
-        zone_preference=zone_preference,
-        skip_group_id=skip_group_id,
-    ) - 2.0
+    return None
 
 
 def _constraint_payload(constraint_type: str, *, target: str = "", relation: str = "") -> Dict[str, Any]:
@@ -446,7 +438,7 @@ def _place_group(
     best_bundle: tuple[List[Dict[str, Any]], float] | None = None
     for anchor_candidate in _group_anchor_candidates(group_spec, dimensions, ordinal):
         anchor_yaw = _group_anchor_yaw(anchor_candidate, group_spec)
-        resolved_anchor, anchor_score = _resolve_scored_position(
+        anchor_choice = _resolve_scored_position(
             desired_pos=anchor_candidate,
             yaw=anchor_yaw,
             role=_safe_text(anchor_asset.get("role") or semantic_role_key(anchor_asset)),
@@ -457,6 +449,9 @@ def _place_group(
             zone_preference=_safe_text(group_spec.get("zone_preference")) or "center",
             skip_group_id=group_id,
         )
+        if anchor_choice is None:
+            continue
+        resolved_anchor, anchor_score = anchor_choice
         anchor_entry = _placement_entry(
             anchor_asset,
             placement_id=f"placement_{placement_index:03d}",
@@ -492,7 +487,7 @@ def _place_group(
                 else:
                     desired_yaw = 0.0
                     relation = "near"
-                resolved_member, member_score = _resolve_scored_position(
+                member_choice = _resolve_scored_position(
                     desired_pos=desired,
                     yaw=desired_yaw,
                     role=_safe_text(member_asset.get("role") or semantic_role_key(member_asset)),
@@ -502,14 +497,27 @@ def _place_group(
                     scene_program=scene_program,
                     zone_preference=_safe_text(group_spec.get("zone_preference")) or "center",
                     anchor_pos=resolved_anchor,
-                    skip_group_id=group_id,
                 )
+                if member_choice is None:
+                    bundle = []
+                    bundle_score = float("-inf")
+                    member_positions = []
+                    break
+                resolved_member, member_score = member_choice
+                
+                if facing_rule in {"toward_anchor", "toward_focal_object"}:
+                    final_yaw = _yaw_to_target(resolved_member, resolved_anchor)
+                elif facing_rule == "parallel":
+                    final_yaw = anchor_yaw
+                else:
+                    final_yaw = 0.0
+
                 bundle.append(
                     _placement_entry(
                         member_asset,
                         placement_id=f"placement_{local_index:03d}",
                         position=resolved_member,
-                        yaw=desired_yaw,
+                        yaw=final_yaw,
                         constraint=_constraint_payload("near", target=str(group_spec.get("anchor_role") or ""), relation=relation),
                     )
                 )
@@ -523,7 +531,7 @@ def _place_group(
                 scene_program,
                 _safe_text(group_spec.get("symmetry")),
             )
-            if best_bundle is None or bundle_score > best_bundle[1]:
+            if bundle and (best_bundle is None or bundle_score > best_bundle[1]):
                 best_bundle = (bundle, bundle_score)
 
     if best_bundle is None:
@@ -624,9 +632,15 @@ def _relation_candidates(
     for relation in role_relations:
         candidate_target_role = _safe_text(relation.get("target_role"))
         relation_type = _safe_text(relation.get("relation"))
-        if candidate_target_role == "room":
-            zone = "edge" if relation_type == "edge" else "center"
-            candidates.append((_zone_position(zone, room_dimensions, ordinal), 0.0, zone, "", relation_type))
+        if candidate_target_role in {"room", "wall"}:
+            zone = "edge" if relation_type in {"edge", "face_to", "against_wall"} or candidate_target_role == "wall" else "center"
+            pos = _zone_position(zone, room_dimensions, ordinal)
+            yaw = 0.0
+            if relation_type in {"face_to", "edge", "against_wall"} or candidate_target_role == "wall":
+                inward_yaw = _yaw_to_target(pos, [0.0, 0.0, 0.0])
+                # Facing the wall means pointing away from the center of the room.
+                yaw = (inward_yaw + 180.0) % 360.0 if relation_type == "face_to" else inward_yaw
+            candidates.append((pos, yaw, zone, candidate_target_role, relation_type))
             continue
         target_placements = placed_roles.get(candidate_target_role) or []
         if not target_placements:
@@ -668,7 +682,7 @@ def _best_placement_choice(
 ) -> tuple[Dict[str, Any], float] | None:
     best_choice: tuple[Dict[str, Any], float] | None = None
     for desired_pos, desired_yaw, zone_preference, target_role, relation_type in candidates:
-        resolved_pos, candidate_score = _resolve_scored_position(
+        choice = _resolve_scored_position(
             desired_pos=desired_pos,
             yaw=desired_yaw,
             role=role,
@@ -678,6 +692,9 @@ def _best_placement_choice(
             scene_program=scene_program,
             zone_preference=zone_preference,
         )
+        if choice is None:
+            continue
+        resolved_pos, candidate_score = choice
         constraint_type = "near" if target_role else ("against_wall" if zone_preference == "edge" and role in EDGE_BIASED_ROLES else "floor")
         placement = _placement_entry(
             asset,

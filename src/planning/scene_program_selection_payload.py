@@ -24,6 +24,7 @@ from src.planning.scene_program_selection_assets import (
     _normalize_rejected_candidate_ids,
     _normalize_rejected_candidates_by_slot,
     _normalize_slot_asset_map,
+    _rescue_missing_hard_slots,
 )
 
 def _selection_error(
@@ -64,18 +65,31 @@ def _ground_selection_slots(
     *,
     scene_program: Dict[str, Any],
     all_assets: List[Dict[str, Any]],
-) -> tuple[Dict[str, Any], Dict[str, str]]:
+) -> tuple[Dict[str, Any], Dict[str, str], Dict[str, List[str]], List[str]]:
+    raw_slot_asset_map = selection.get("slot_asset_map") if isinstance(selection.get("slot_asset_map"), dict) else {}
     slot_asset_map = _normalize_slot_asset_map(
-        selection.get("slot_asset_map"),
+        raw_slot_asset_map,
         scene_program=scene_program,
         all_assets=all_assets,
+    )
+    fallback_asset_ids_by_slot = _normalize_fallback_asset_ids_by_slot(
+        selection.get("fallback_asset_ids_by_slot"),
+        scene_program=scene_program,
+        all_assets=all_assets,
+    )
+    slot_asset_map, fallback_asset_ids_by_slot, softened_rescue_slot_ids = _rescue_missing_hard_slots(
+        scene_program=scene_program,
+        slot_asset_map=slot_asset_map,
+        fallback_asset_ids_by_slot=fallback_asset_ids_by_slot,
+        all_assets=all_assets,
+        blocked_slot_ids={str(slot_id or "").strip() for slot_id in raw_slot_asset_map if str(slot_id or "").strip() not in slot_asset_map},
     )
     grounded_scene_program = ground_scene_program(
         scene_program,
         slot_asset_map=slot_asset_map,
         all_assets=all_assets,
     )
-    return grounded_scene_program, slot_asset_map
+    return grounded_scene_program, slot_asset_map, fallback_asset_ids_by_slot, softened_rescue_slot_ids
 
 
 def _normalized_group_assignments(
@@ -183,12 +197,14 @@ def _selection_coverage(
     slot_asset_map: Dict[str, str],
     fallback_asset_ids_by_slot: Dict[str, List[str]],
     selection_coverage_errors: List[str],
+    softened_rescue_slot_ids: List[str] | None = None,
     prompt_text: str = "",
 ) -> Dict[str, Any]:
     covered_required_slots: List[str] = []
     missing_required_slots: List[str] = []
     softened_required_slots: List[str] = []
     slot_diagnostics: List[Dict[str, Any]] = []
+    softened_slot_ids = set(softened_rescue_slot_ids or [])
     scene_slots = [
         slot
         for slot in _scene_slots(scene_program)
@@ -200,7 +216,7 @@ def _selection_coverage(
             continue
         runtime_role = _slot_role(slot)
         requiredness = _slot_requiredness(slot, scene_program=scene_program)
-        hard_required = requiredness == "hard"
+        hard_required = requiredness == "hard" and slot_id not in softened_slot_ids
         status = "covered" if str(slot_asset_map.get(slot_id) or "").strip() else "missing"
         if slot_id in fallback_asset_ids_by_slot:
             status = "fallback_used"
@@ -213,10 +229,10 @@ def _selection_coverage(
         }
         if runtime_role:
             entry["runtime_role"] = runtime_role
-        entry["requiredness"] = requiredness
+        entry["requiredness"] = "soft" if slot_id in softened_slot_ids else requiredness
         slot_diagnostics.append(entry)
         if not hard_required:
-            if status == "soft_missing" and _slot_priority(slot.get("priority")) == "must":
+            if slot_id in softened_slot_ids or (status == "soft_missing" and _slot_priority(slot.get("priority")) == "must"):
                 softened_required_slots.append(slot_id)
             continue
         if status == "missing":
@@ -284,4 +300,3 @@ def _semantic_selection_payload(
         ),
         "surface_material_selection": surface_material_selection,
     }
-

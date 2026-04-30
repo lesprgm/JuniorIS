@@ -14,6 +14,7 @@ from src.placement.geometry import (
     semantic_role_key,
 )
 from src.placement.semantic_taxonomy import expand_semantic_aliases
+from src.planning.scene_program_common import _derive_role_fields_from_slots
 from src.planning.scene_policy import asset_allowed_by_scene_policy, negative_policy_tokens
 from src.runtime.realization_registry import (
     resolve_target_height_meters,
@@ -270,7 +271,31 @@ def _asset_semantic_tokens(asset: Dict[str, Any]) -> set[str]:
     return tokens
 
 
-def _slot_match_score(asset: Dict[str, Any], slot: Dict[str, Any], scene_tokens: set[str], prompt_tokens: set[str]) -> tuple[int, int, int, float, str]:
+def _slot_family_preference(asset: Dict[str, Any], slot: Dict[str, Any], scene_program: Dict[str, Any] | None) -> int:
+    concept = canonicalize_semantic_concept(slot.get("concept"))
+    subtype = canonicalize_semantic_concept(slot.get("subtype"))
+    role = semantic_role_key(asset)
+    asset_subtype = canonicalize_semantic_concept(asset.get("room_role_subtype"))
+    label = _asset_text(asset, "label")
+    tags = _asset_semantic_tokens(asset)
+    density_profile = _asset_text(scene_program or {}, "density_profile") if isinstance(scene_program, dict) else ""
+
+    if concept in {"nightstand", "bedside_surface"} or subtype in {"nightstand", "bedside_surface"}:
+        if {"nightstand", "side_table", "bedside_table"} & ({asset_subtype, label} | tags):
+            return -3
+        if role == "table" and asset_subtype not in {"nightstand", "side_table", "bedside_table"}:
+            return 3
+        if density_profile == "minimal" and asset_subtype in {"dining_table", "coffee_table", "display_table"}:
+            return 2
+    if concept in {"dresser", "wardrobe", "closet", "sleep_storage"} or subtype in {"dresser", "wardrobe", "closet"}:
+        if {"dresser", "wardrobe", "closet", "storage"} & ({asset_subtype, label} | tags):
+            return -2
+        if role == "table":
+            return 2
+    return 0
+
+
+def _slot_match_score(asset: Dict[str, Any], slot: Dict[str, Any], scene_tokens: set[str], prompt_tokens: set[str], scene_program: Dict[str, Any] | None = None) -> tuple[int, int, int, float, str]:
     asset_tokens = _asset_semantic_tokens(asset)
     concept = slot.get("concept") or ""
     runtime_role = slot.get("runtime_role") or ""
@@ -281,6 +306,7 @@ def _slot_match_score(asset: Dict[str, Any], slot: Dict[str, Any], scene_tokens:
     style_hits = len((scene_tokens | prompt_tokens) & asset_tokens)
     semantic_conf = float(asset.get("semantic_confidence", 0.55) or 0.55)
     return (
+        _slot_family_preference(asset, slot, scene_program),
         -(concept_hit * 4 + subtype_hit * 2 + role_hit),
         -style_hits,
         0 if asset.get("coherence_family_id") else 1,
@@ -358,20 +384,7 @@ def build_semantic_candidate_shortlist(  # filters approved assets and packs a s
 
     requested_slots_view = _requested_slots_view(intent_spec=intent_spec, scene_program=scene_program)
     semantic_slots = requested_slots_view["semantic_slots"]
-    required_roles = []
-    optional_roles = []
-    for slot in semantic_slots:
-        role = slot.get("runtime_role") or ""
-        if not role:
-            continue
-        if slot.get("priority") == "optional":
-            if role not in required_roles and role not in optional_roles:
-                optional_roles.append(role)
-        else:
-            if role not in required_roles:
-                required_roles.append(role)
-            if role in optional_roles:
-                optional_roles.remove(role)
+    required_roles, optional_roles, _ = _derive_role_fields_from_slots(semantic_slots)
     required_role_set = set(required_roles)
     requested_roles = required_roles + [role for role in optional_roles if role not in required_roles]
     scene_filtered_assets = [
@@ -399,7 +412,7 @@ def build_semantic_candidate_shortlist(  # filters approved assets and packs a s
             safe_assets = prompt_matched_assets
 
     for slot in sorted(semantic_slots, key=lambda item: (_priority_rank(item.get("priority", "should")), item["slot_id"])):
-        ranked = sorted(safe_assets, key=lambda asset: _slot_match_score(asset, slot, scene_tokens, prompt_tokens))
+        ranked = sorted(safe_assets, key=lambda asset: _slot_match_score(asset, slot, scene_tokens, prompt_tokens, scene_program))
         for asset in ranked[: min(SHORTLIST_ROLE_COVERAGE_LIMIT, limit)]:
             if not asset_allowed_for_slot(
                 asset,
